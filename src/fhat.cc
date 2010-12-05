@@ -372,7 +372,6 @@ long long int readLongLongInt(FILE *f) {
 	}
 
 	size_t readValueForType(char type, FILE *input) {
-		    //fprintf(stderr, "reading value for type: %x\n", (int)type);
 		size_t vSize = getJavaValueSize(signatureFromTypeId(type));
 		skipBytes(input, vSize);
 		return vSize;
@@ -450,7 +449,6 @@ long long int readLongLongInt(FILE *f) {
 		    }
 		}
 		else {
-		    //fprintf(stderr, "ARRAY ELEMENT CLASS ID: %lu\n", elementClassID);
 		    if(classNameFromObjectId.find(elementClassID) != classNameFromObjectId.end()) {
 			    primArrType = "???";
 		    }
@@ -459,40 +457,19 @@ long long int readLongLongInt(FILE *f) {
 		    }
 		}
 		if (primitiveSignature != 0x00) {
-		    //byte[] data = new byte[elSize * num];
 		    skipBytes(input, elSize*num);
 		    bytesRead += elSize*num;
-		    //in.readFully(data);
 
-		    /*if (version < VERSION_JDK12BETA4) {
-			primArrType = null;	// They weren't named
-		    }
-		    JavaValueArray va 
-			= new JavaValueArray(primitiveSignature, primArrType, 
-					     data, stackTrace);
-		    snapshot.addHeapObject(id, va);*/
-		    fprintf (instancesFile, "array: %lu %lu %lu\n", id, elementClassID, (unsigned long)elSize*num);
+		    fprintf (instancesFile, "AP %lu %lu %lu\n", id, elementClassID, (unsigned long)elSize*num);
 		} else {
 		    int arrayClassID = 0;
 		    int sz = num * identifierSize;
 		    bytesRead += sz;
-		    //skipBytes(input, identifierSize * num);
-		    fprintf(instancesFile, "array: %lu %lu %lu\n", id, elementClassID, identifierSize*num);
+		    fprintf(instancesFile, "AO %lu %lu %lu\n", id, elementClassID, identifierSize*num);
 		    for (int i = 0; i < num; i++) {
 			long int idElement = readIdentifier(input);
-			fprintf(referencesFile, "reference: %lu %lu %lu []\n", id, elementClassID, idElement);
+			fprintf(referencesFile, "RF %lu %lu %lu []\n", id, elementClassID, idElement);
 		    }
-		    /*if (version >= VERSION_JDK12BETA4) {
-			// It changed from the ID of the object describing the
-			// class of element types to the ID of the object describing
-			// the type of the array.
-			arrayClassID = elementClassID;
-			elementClassID = 0;
-		    }
-		    JavaObjectArray arr = 
-			new JavaObjectArray(data, sz, stackTrace,
-					    elementClassID, arrayClassID);
-		    snapshot.addHeapObject(id, arr);*/
 		}
 		return bytesRead;
 	    }
@@ -558,9 +535,9 @@ long long int readLongLongInt(FILE *f) {
 		    fieldNamesFromClassId[id].push_back(nameFromId[nameId]);
 		}
 
-		fprintf(classesFile, "class: %lu %lu %s %d\n", id, superId, classNameFromObjectId[id].c_str(), bytesRead);
+		fprintf(classesFile, "CL %lu %lu %s %d\n", id, superId, classNameFromObjectId[id].c_str(), bytesRead);
 		for(int i=0; i<staticReferences.size();i++) {
-			fprintf(referencesFile, "reference: %lu %lu %lu %s\n", id, id, staticReferences[i], staticNames[i].c_str());
+			fprintf(referencesFile, "RF %lu %lu %lu %s\n", id, id, staticReferences[i], staticNames[i].c_str());
 		}
 
 		return bytesRead;
@@ -584,8 +561,7 @@ long long int readLongLongInt(FILE *f) {
 		// Get the # of bytes for the field values:
 		size_t bytesFollowing = (b1 << 24) | (b2 << 16) | (b3 << 8) | (b4 << 0);
 		assert(classNameFromObjectId.find(classId) != classNameFromObjectId.end());
-		fprintf(instancesFile, "instance: %lu %lu %lu\n", id, classId, classNameFromObjectId[classId].c_str(), bytesFollowing+size);
-		//skipBytes(input, bytesFollowing);
+		fprintf(instancesFile, "IN %lu %lu %lu\n", id, classId, bytesFollowing+size);
 		size_t bytesRead = 0;
 
 		long int currentClassId = classId;
@@ -597,7 +573,7 @@ long long int readLongLongInt(FILE *f) {
 			for(int i=0; i<fields.size(); i++) {
 				if(T_CLASS == fields[i]) {                                     	
                                         long int referenceId = readIdentifier(input);
-					fprintf(referencesFile, "reference: %lu %lu %lu %s\n", id, currentClassId, referenceId, fieldNames[i].c_str());
+					fprintf(referencesFile, "RF %lu %lu %lu %s\n", id, currentClassId, referenceId, fieldNames[i].c_str());
 					bytesRead += identifierSize;
                                 }
                                 else {

@@ -326,6 +326,31 @@ long long int readLongLongInt(FILE *f) {
 		    }
 		}
 	}
+	
+	struct StackFrame {
+		long int id;
+		int classSerialNumber;
+		long int methodNameId;
+		long int methodSigId;
+		long int sourceFileId;
+		int lineNumber;
+		StackFrame() {
+		}
+
+		StackFrame(long int id, long int mn, long int ms, long int sf, int cln, int ln) {
+			this->id = id;
+			this->classSerialNumber = cln;
+			this->methodNameId = mn;
+			this->methodSigId = ms;
+			this->sourceFileId = sf;
+			this->lineNumber = ln;
+		}
+	};
+	
+	std::map<long int, std::string> nameFromId;
+	std::map<int, std::string> classNameFromSerialNumber;
+	std::map<long int, std::string> classNameFromObjectId;
+	std::map<long int, StackFrame> stackFrameFromId;
 
 	size_t readValue(FILE *input) {
 		char type;
@@ -416,6 +441,15 @@ long long int readLongLongInt(FILE *f) {
 			}
 		    }
 		}
+		else {
+		    //fprintf(stderr, "ARRAY ELEMENT CLASS ID: %lu\n", elementClassID);
+		    if(classNameFromObjectId.find(elementClassID) != classNameFromObjectId.end()) {
+			    primArrType = "???";
+		    }
+		    else {
+			    primArrType = classNameFromObjectId[elementClassID];
+		    }
+		}
 		if (primitiveSignature != 0x00) {
 		    //byte[] data = new byte[elSize * num];
 		    skipBytes(input, elSize*num);
@@ -429,6 +463,7 @@ long long int readLongLongInt(FILE *f) {
 			= new JavaValueArray(primitiveSignature, primArrType, 
 					     data, stackTrace);
 		    snapshot.addHeapObject(id, va);*/
+		    fprintf (stdout, "array: %lu (%lu %s) size %lu\n", id, elementClassID, primArrType.c_str(), elSize*num);
 		} else {
 		    int arrayClassID = 0;
 		    int sz = num * identifierSize;
@@ -448,40 +483,19 @@ long long int readLongLongInt(FILE *f) {
 			new JavaObjectArray(data, sz, stackTrace,
 					    elementClassID, arrayClassID);
 		    snapshot.addHeapObject(id, arr);*/
+		    fprintf(stdout, "array: %lu (%lu %s[]) size %lu\n", id, elementClassID, primArrType.c_str(), identifierSize*num);
 		}
 		return bytesRead;
 	    }
 
 
-	struct StackFrame {
-		long int id;
-		int classSerialNumber;
-		long int methodNameId;
-		long int methodSigId;
-		long int sourceFileId;
-		int lineNumber;
-		StackFrame() {
-		}
 
-		StackFrame(long int id, long int mn, long int ms, long int sf, int cln, int ln) {
-			this->id = id;
-			this->classSerialNumber = cln;
-			this->methodNameId = mn;
-			this->methodSigId = ms;
-			this->sourceFileId = sf;
-			this->lineNumber = ln;
-		}
-	};
-
-	std::map<long int, std::string> nameFromId;
-	std::map<int, std::string> classNameFromSerialNumber;
-	std::map<long int, std::string> classNameFromObjectId;
-	std::map<long int, StackFrame> stackFrameFromId;
 
 	int readClass(FILE *input) {
+		size_t POS  = positionInFile;
 		long int id = readIdentifier(input);
 		assert(classNameFromObjectId.find(id) != classNameFromObjectId.end());
-		fprintf(stdout, "\treading class: %s (%ld)\n", classNameFromObjectId[id].c_str(), id);
+		//fprintf(stdout, "\treading class: %s (%ld)\n", classNameFromObjectId[id].c_str(), id);
 		int stackTraceId = readInt(input);
 		//StackTrace stackTrace = getStackTraceFromSerial(stackTraceId);
 		long int superId = readIdentifier(input);
@@ -507,7 +521,7 @@ long long int readLongLongInt(FILE *f) {
 		//JavaStatic[] statics = new JavaStatic[numStatics];
 		for (int i = 0; i < numStatics; i++) {
 		    long int nameId = readIdentifier(input);
-		    fprintf(stdout, "\t\tstatic: %lx %s\n", nameId, nameFromId[nameId].c_str());
+		    //fprintf(stdout, "\t\tstatic: %lx %s\n", nameId, nameFromId[nameId].c_str());
 		    assert(nameFromId.find(nameId) != nameFromId.end());
 		    bytesRead += identifierSize;
 		    char type = readByte(input);
@@ -521,13 +535,12 @@ long long int readLongLongInt(FILE *f) {
 		    //JavaField f = new JavaField(fieldName, signature);
 		    //statics[i] = new JavaStatic(f, valueBin[0]);
 		}
-
 		int numFields = readUnsignedShort(input);
 		bytesRead += 2;
 		//JavaField[] fields = new JavaField[numFields];
 		for (int i = 0; i < numFields; i++) {
 		    long int nameId = readIdentifier(input);
-			fprintf(stdout, "\t\tfield: %lx %s\n", nameId, nameFromId[nameId].c_str());
+			//fprintf(stdout, "\t\tfield: %lx %s\n", nameId, nameFromId[nameId].c_str());
 		    assert(nameFromId.find(nameId) != nameFromId.end());
 
 		    bytesRead += identifierSize;
@@ -547,12 +560,63 @@ long long int readLongLongInt(FILE *f) {
 		//JavaClass c = new JavaClass(name, superId, fields, statics, stackTrace, instanceSize);
 		//snapshot.addClass(id, c);
 
+		fprintf(stdout, "class: %lu (%lu %s) size %lu\n", id, id, classNameFromObjectId[id].c_str(), bytesRead);
+
 		return bytesRead;
 	}
+	
+/*int readInstanceDeferred(FILE *f) {
+	long int id = readIdentifier(f);
+	int stackTraceId = readInt(f);
+	long int classID = readIdentifier(f);
+	int bytesFollowing = in.readInt();
+	int bytesRead = 2 * identifierSize + 8;
+
+	//TODO: two passes!
+	// This is why we need to defer this:  To guarantee the class
+	// will be there.
+	//JavaClass clazz = (JavaClass) snapshot.findThing(classID);
+	//if (clazz == null) {
+	//    throw new IOException("Class 0x" + toHex(classID)
+	//			  + " not found.");
+	//}
+	//clazz.resolveSuperclass(snapshot);
+	//JavaThing[] valueBin = new JavaThing[1];
+	//int target = clazz.getNumFieldsForInstance();
+	//JavaThing[] fieldValues = new JavaThing[target];
+	//int fieldNo = 0;
+	//JavaField[] fields = clazz.getFields();
+	// Target is used to compensate for the fact that the dump
+	// file starts field values from the leaf working upwards
+	// in the inheritance hierarchy, whereas JavaObject starts
+	// with the top of the inheritance hierarchy and works down.
+	target -= fields.length;
+	JavaClass currClass = clazz;
+	for (int i = 0; i < fieldValues.length; i++) {
+	    while (fieldNo >= fields.length) {
+		currClass = currClass.getSuperclass();
+		fields = currClass.getFields();
+		fieldNo = 0;
+		target -= fields.length;
+	    }
+	    JavaField f = fields[fieldNo];
+	    byte type = (byte) f.getSignature().charAt(0);
+	    bytesRead += readValueForTypeSignature(type, valueBin);
+	    fieldValues[target + fieldNo] = valueBin[0];
+	    fieldNo++;
+	}
+	snapshot.addHeapObject(id, new JavaObject(clazz, fieldValues, stackTrace));
+	return bytesRead;
+    }*/
+
 	size_t readInstance(FILE *input) {
-		size_t size = 2 * identifierSize + 8;
+		long int id = readIdentifier(input);
+		int stackTraceId = readInt(input);
+		long int classId = readIdentifier(input);
+		size_t size = 4;
 		assert(size >= 4);
 		skipBytes(input, size-4);
+		size += identifierSize*2 + 4;
 
 		char b[4];
 		readBytes(&b[0], 4, input);
@@ -562,6 +626,8 @@ long long int readLongLongInt(FILE *f) {
 		int b4 = b[3] & 0xff;
 		// Get the # of bytes for the field values:
 		size_t bytesFollowing = (b1 << 24) | (b2 << 16) | (b3 << 8) | (b4 << 0);
+		assert(classNameFromObjectId.find(classId) != classNameFromObjectId.end());
+		fprintf(stdout, "instance: %lu (%lu %s) size %lu\n", id, classId, classNameFromObjectId[classId].c_str(), bytesFollowing+size);
 		skipBytes(input, bytesFollowing);
 		//appendToInstanceBuf(bytesFollowing);
 		return size + bytesFollowing;
@@ -578,12 +644,15 @@ long long int readLongLongInt(FILE *f) {
 		size_t dumpStartPosition = positionInFile;
 		size_t bytesLeft = dumpSize;
 		char recordType;
+		unsigned long long records = 0;
 		while(positionInFile - dumpStartPosition < dumpSize) {
 			assert(positionInFile == ftell(input));
 			//assert(positionInFile - dumpStartPosition < dumpSize);
-			//assert((dumpSize - bytesLeft) == (positionInFile - dumpStartPosition));
+			assert((dumpSize - bytesLeft) == (positionInFile - dumpStartPosition));
 			recordType = readByte(input);
-			fprintf(stdout, "reading dump record %x %s\n", (int)recordType, getDumpRecordName(recordType));
+			bytesLeft--;
+			//fprintf(stdout, "DR %llu: %x %s\n", records, (int)recordType, getDumpRecordName(recordType));
+			records++;
 			switch(recordType) {
 			/*case HPROF_GC_ROOT_UNKNOWN: {
 			    long int id = readIdentifier(input);
@@ -715,7 +784,6 @@ long long int readLongLongInt(FILE *f) {
 		fprintf(stderr, "version is: \"%s\" %lu\n", versionBuffer, vbs);
 		positionInFile += vbs;
 
-		//for some reason we need to skip another 4 bytes...
 		identifierSize = readInt(input);
 		creationTimestamp = readLongLongInt(input);
 		char *creationTimeString = ctime((const time_t *)&creationTimestamp);
@@ -747,7 +815,7 @@ long long int readLongLongInt(FILE *f) {
 			assert(positionInFile == ftell(input));
 			recordTimestamp = readInt(input);
 			recordLength = readInt(input);
-			fprintf(stdout, "%llu %d: %d (%s) of length %lu\n", numRecords, recordTimestamp, (int)recordType, getRecordName(recordType), recordLength);
+			//fprintf(stdout, "%llu %d: %d (%s) of length %lu\n", numRecords, recordTimestamp, (int)recordType, getRecordName(recordType), recordLength);
 			numRecords++;
 
 
@@ -762,7 +830,7 @@ long long int readLongLongInt(FILE *f) {
 				|| recordType == HPROF_LOCKSTATS_HOLD_TIME)
 			{
 				//we don't care about these records
-				fprintf(stdout, "\tskipping record\n");
+				//fprintf(stdout, "\tskipping record\n");
 				ret = skipBytes(input, recordLength);
 				assert(!ret);
 			}
@@ -791,7 +859,7 @@ long long int readLongLongInt(FILE *f) {
 						assert(recordLength >= identifierSize);
 						id = readIdentifier(record);
 						record[recordLength]=0;
-						fprintf(stdout, "\t%ld -> %s\n", id, record+identifierSize);
+						//fprintf(stdout, "\t%ld -> %s\n", id, record+identifierSize);
 						nameFromId[id] = std::string(record+identifierSize);
 						break;
 					case HPROF_LOAD_CLASS :
@@ -800,7 +868,7 @@ long long int readLongLongInt(FILE *f) {
 						classId = readIdentifier(record+sizeof(int));
 						stackTraceSerialNumber = readInt(record+sizeof(int)+identifierSize);
 						classNameId = readIdentifier(record+sizeof(int)*2+identifierSize);
-						fprintf(stdout, "\t%ld named %ld %s\n", classId, classNameId, nameFromId[classNameId].c_str());
+						//fprintf(stdout, "\t%ld named %ld %s\n", classId, classNameId, nameFromId[classNameId].c_str());
 						assert(nameFromId.find(classNameId) != nameFromId.end());
 						classNameFromObjectId[classId] = nameFromId[classNameId];
 						classNameFromSerialNumber[serialNumber] = nameFromId[classNameId];

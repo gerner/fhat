@@ -39,6 +39,12 @@ the output of fhat is meant to be analyzed by other simple tools such as:
 
 ### Getting Data into Sqlite
 
+First, I highly recommend you run sqlite in nosync mode.  This will improve the time it import data and do any inserts you might do (see transitive closure below).
+
+	PRAGMA synchronous = OFF;
+
+In my experience, on a laptop I can get 9 or 10 MB/sec on a laptop with sync on (synchronous = NORMAL).  But I get 15-20 MB/sec with nosync (synchronous OFF).
+
 to that end here's a simple schema for sqlite3:
 
 	CREATE TABLE classes (code TEXT, id INTEGER, superId INTEGER, name TEXT, size INTEGER);
@@ -48,15 +54,9 @@ to that end here's a simple schema for sqlite3:
 to import into these tables you'll need to run commands similar to the following:
 
 	.separator ' '
-	BEGIN
 	.import /path/to/classes classes
-	COMMIT
-	BEGIN
 	.import /path/to/instances instances
-	COMMIT
-	BEGIN
 	.import /path/to/references refs
-	COMMIT
 
 I suggest the following indexes once you have imported all of your data:
 
@@ -67,6 +67,7 @@ I suggest the following indexes once you have imported all of your data:
 	CREATE INDEX rcid ON refs (classId);
 	CREATE INDEX rrid ON refs (refId);
 
+Note that creating all of these indexes will take many minutes for large dumps and will more than double the size of the resulting database. This should not be a problem since you won't be inserting into these tables and the indexes are critical for analysis.
 
 ### Finding Simple Info About Instances
 

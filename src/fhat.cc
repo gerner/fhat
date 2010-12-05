@@ -9,6 +9,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #define ntohll(x) ( ( (uint64_t)(ntohl( (uint32_t)((x << 32) >> 32) )) << 32) | ntohl( ((uint32_t)(x >> 32)) ) )
 #define htonll(x) ntohll(x)
@@ -351,6 +352,8 @@ long long int readLongLongInt(FILE *f) {
 	std::map<int, std::string> classNameFromSerialNumber;
 	std::map<long int, std::string> classNameFromObjectId;
 	std::map<long int, StackFrame> stackFrameFromId;
+	std::map<long int, long int> superIdFromClassId;
+	std::map<long int, std::vector<char> > fieldTypesFromClassId;
 
 	size_t readValue(FILE *input) {
 		char type;
@@ -463,16 +466,18 @@ long long int readLongLongInt(FILE *f) {
 			= new JavaValueArray(primitiveSignature, primArrType, 
 					     data, stackTrace);
 		    snapshot.addHeapObject(id, va);*/
-		    fprintf (stdout, "array: %lu (%lu %s) size %lu\n", id, elementClassID, primArrType.c_str(), elSize*num);
+		    fprintf (stdout, "array: %lu class %lu %s size %lu\n", id, elementClassID, primArrType.c_str(), elSize*num);
 		} else {
 		    int arrayClassID = 0;
 		    int sz = num * identifierSize;
 		    bytesRead += sz;
-		    skipBytes(input, identifierSize * num);
-		    /*for (int i = 0; i < data.length; i++) {
-			data[i] = readIdentifier(input);
+		    //skipBytes(input, identifierSize * num);
+		    fprintf(stdout, "array: %lu class %lu %s[] size %lu\n", id, elementClassID, primArrType.c_str(), identifierSize*num);
+		    for (int i = 0; i < num; i++) {
+			long int idElement = readIdentifier(input);
+			fprintf(stdout, "\treference: %lu\n", idElement);
 		    }
-		    if (version >= VERSION_JDK12BETA4) {
+		    /*if (version >= VERSION_JDK12BETA4) {
 			// It changed from the ID of the object describing the
 			// class of element types to the ID of the object describing
 			// the type of the array.
@@ -483,7 +488,6 @@ long long int readLongLongInt(FILE *f) {
 			new JavaObjectArray(data, sz, stackTrace,
 					    elementClassID, arrayClassID);
 		    snapshot.addHeapObject(id, arr);*/
-		    fprintf(stdout, "array: %lu (%lu %s[]) size %lu\n", id, elementClassID, primArrType.c_str(), identifierSize*num);
 		}
 		return bytesRead;
 	    }
@@ -499,6 +503,7 @@ long long int readLongLongInt(FILE *f) {
 		int stackTraceId = readInt(input);
 		//StackTrace stackTrace = getStackTraceFromSerial(stackTraceId);
 		long int superId = readIdentifier(input);
+		superIdFromClassId[id] = superId;
 		long int classLoaderId = readIdentifier(input);	// Ignored for now
 		long int signersId = readIdentifier(input);	// Ignored for now
 		long int protDomainId = readIdentifier(input);	// Ignored for now
@@ -519,6 +524,7 @@ long long int readLongLongInt(FILE *f) {
 		bytesRead += 2;
 		//JavaThing[] valueBin = new JavaThing[1];
 		//JavaStatic[] statics = new JavaStatic[numStatics];
+		std::vector<long int> staticReferences;
 		for (int i = 0; i < numStatics; i++) {
 		    long int nameId = readIdentifier(input);
 		    //fprintf(stdout, "\t\tstatic: %lx %s\n", nameId, nameFromId[nameId].c_str());
@@ -526,7 +532,13 @@ long long int readLongLongInt(FILE *f) {
 		    bytesRead += identifierSize;
 		    char type = readByte(input);
 		    bytesRead++;
-		    bytesRead += readValueForType(type, input);
+		    if(T_CLASS == type) {
+			    staticReferences.push_back(readIdentifier(input));
+			    bytesRead += identifierSize;
+		    }
+		    else {
+			    bytesRead += readValueForType(type, input);
+		    }
 		    //String fieldName = getNameFromID(nameId);
 		    //if (version >= VERSION_JDK12BETA4) {
 		    //	type = signatureFromTypeId(type);
@@ -535,9 +547,11 @@ long long int readLongLongInt(FILE *f) {
 		    //JavaField f = new JavaField(fieldName, signature);
 		    //statics[i] = new JavaStatic(f, valueBin[0]);
 		}
+		assert(positionInFile - POS == bytesRead);
 		int numFields = readUnsignedShort(input);
 		bytesRead += 2;
 		//JavaField[] fields = new JavaField[numFields];
+		fieldTypesFromClassId[id] = std::vector<char>();
 		for (int i = 0; i < numFields; i++) {
 		    long int nameId = readIdentifier(input);
 			//fprintf(stdout, "\t\tfield: %lx %s\n", nameId, nameFromId[nameId].c_str());
@@ -546,6 +560,7 @@ long long int readLongLongInt(FILE *f) {
 		    bytesRead += identifierSize;
 		    char type = readByte(input);
 		    bytesRead++;
+		    fieldTypesFromClassId[id].push_back(type);
 		    //String fieldName = getNameFromID(nameId);
 		    //if (version >= VERSION_JDK12BETA4) {
 		    //	type = signatureFromTypeId(type);
@@ -560,7 +575,10 @@ long long int readLongLongInt(FILE *f) {
 		//JavaClass c = new JavaClass(name, superId, fields, statics, stackTrace, instanceSize);
 		//snapshot.addClass(id, c);
 
-		fprintf(stdout, "class: %lu (%lu %s) size %lu\n", id, id, classNameFromObjectId[id].c_str(), bytesRead);
+		fprintf(stdout, "class: %lu class %lu %s size %lu superclass %lu %s\n", id, id, classNameFromObjectId[id].c_str(), bytesRead, superId, classNameFromObjectId[superId].c_str());
+		for(int i=0; i<staticReferences.size();i++) {
+			fprintf(stdout, "\treference: %llu\n", staticReferences[i]);
+		}
 
 		return bytesRead;
 	}
@@ -627,9 +645,29 @@ long long int readLongLongInt(FILE *f) {
 		// Get the # of bytes for the field values:
 		size_t bytesFollowing = (b1 << 24) | (b2 << 16) | (b3 << 8) | (b4 << 0);
 		assert(classNameFromObjectId.find(classId) != classNameFromObjectId.end());
-		fprintf(stdout, "instance: %lu (%lu %s) size %lu\n", id, classId, classNameFromObjectId[classId].c_str(), bytesFollowing+size);
-		skipBytes(input, bytesFollowing);
-		//appendToInstanceBuf(bytesFollowing);
+		fprintf(stdout, "instance: %lu class %lu %s size %lu\n", id, classId, classNameFromObjectId[classId].c_str(), bytesFollowing+size);
+		//skipBytes(input, bytesFollowing);
+		size_t bytesRead = 0;
+
+		long int currentClassId = classId;
+		while(currentClassId != 0) {
+			assert(fieldTypesFromClassId.find(currentClassId) != fieldTypesFromClassId.end());
+			std::vector<char> fields = fieldTypesFromClassId[currentClassId];
+			for(int i=0; i<fields.size(); i++) {
+				if(T_CLASS == fields[i]) {                                     	
+                                        long int referenceId = readIdentifier(input);
+					fprintf(stdout, "\treference: %lu\n", referenceId);
+					bytesRead += identifierSize;
+                                }
+                                else {
+                                        bytesRead += readValueForType(fields[i], input);
+                                }
+			}
+			assert(superIdFromClassId.find(currentClassId) != superIdFromClassId.end());
+			currentClassId = superIdFromClassId[currentClassId];
+		}
+		assert(bytesFollowing == bytesRead);
+
 		return size + bytesFollowing;
 	}
 	int readHeapDump(FILE *input, size_t dumpSize) {

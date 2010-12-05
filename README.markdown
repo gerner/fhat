@@ -29,11 +29,43 @@ CREATE TABLE classes (code TEXT, id INTEGER, superId INTEGER, name TEXT, size IN
 CREATE TABLE instances (code TEXT, id INTEGER, classId INTEGER, size INTEGER);
 CREATE TABLE refs (code TEXT, id INTEGER, classId INTEGER, refId INTEGER, fieldName TEXT);
 
+to import into these tables you'll need to run commands similar to the following:
+
+.separator ' '
+BEGIN
+.import /path/to/classes classes
+COMMIT
+BEGIN
+.import /path/to/instances instances
+COMMIT
+BEGIN
+.import /path/to/references refs
+COMMIT
+
 I suggest the following indexes once you have imported all of your data:
+
 CREATE INDEX cid ON classes (id);
 CREATE INDEX iid ON instances (id);
 CREATE INDEX icid ON instances (classId);
 CREATE INDEX riid ON refs (id);
-CREATE INDEX rcid ON refs (cid);
+CREATE INDEX rcid ON refs (classId);
 CREATE INDEX rrid ON refs (refId);
+
+now some useful queries:
+
+find the number of Strings:
+SELECT COUNT(*) FROM instances JOIN classes ON instances.classId = classes.id WHERE classes.name = "java/lang/String";
+
+find the number of objects that have direct references to strings:
+CREATE TEMP TABLE string_instances (id INTEGER);
+INSERT INTO string_instances SELECT instances.id FROM instances JOIN classes ON instances.classId = classes.id WHERE classes.name = "java/lang/String";
+SELECT COUNT(*) FROM instances JOIN references ON instances.id = references.id JOIN string_instances ON references.refId = string_instances.id;
+
+find the different classes that are holding references to HasTableEntry objects, and how many references they hold
+
+CREATE TEMP TABLE entry_instances (id INTEGER);
+INSERT INTO entry_instances SELECT instances.id FROM instances JOIN classes ON instances.classId = classes.id WHERE classes.name = "java/util/HashTableEntry";
+SELECT refs.classId, COUNT(refs.refId) FROM refs JOIN map_instances ON refs.refId = map_instances.id GROUP BY refs.classId ORDER BY COUNT(refs.refId) DESC LIMIT 20;
+
+now you'll need to look up the class name for the items that ocurr high up on the list (this is faster than joining against classes)
 

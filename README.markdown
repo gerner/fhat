@@ -69,3 +69,9 @@ SELECT refs.classId, COUNT(refs.refId) FROM refs JOIN map_instances ON refs.refI
 
 now you'll need to look up the class name for the items that ocurr high up on the list (this is faster than joining against classes)
 
+find the classes of instances that are holding on to the most memory:
+select classId, count(id), sum(size) from instances group by classId order by sum(size) desc limit 20;
+
+find the classes holding on to references of a particular type:
+select refs.classid, count(refs.id), sum(instances.size) from instances join refs on instances.id = refs.refid where instances.classid=46912581001104 group by refs.classid order by sum(instances.size) desc limit 20;
+

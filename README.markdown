@@ -20,22 +20,23 @@ now you have the fhat executable in the src directory
 
 fhat takes a dump file in the HPROF binary format and produces several text files representing that dump.  The command line is as follows:
 
-	fhat dumpfile instances_file classes_file references_file
+	fhat dumpfile instances_file classes_file references_file names_file
 
 where 
- * dumpfile is the HPROF binary dump
- * instances_file is the output file for information about instances
- * classes_file is the output file for information about classes
- * references_file is the output file for information about references held by instances
+* dumpfile is the HPROF binary dump
+* instances_file is the output file for information about instances
+* classes_file is the output file for information about classes
+* references_file is the output file for information about references held by instances
+* names_file is the output file for all identifiers (in particular field names)
 
 ## Analyzing
 
 the output of fhat is meant to be analyzed by other simple tools such as:
- * grep
- * awk
- * sort
- * uniq
- * sqlite
+* grep
+* awk
+* sort
+* uniq
+* sqlite
 
 ### Getting Data into Sqlite
 
@@ -49,7 +50,8 @@ to that end here's a simple schema for sqlite3:
 
 	CREATE TABLE classes (code TEXT, id INTEGER, superId INTEGER, name TEXT, size INTEGER);
 	CREATE TABLE instances (code TEXT, id INTEGER, classId INTEGER, size INTEGER);
-	CREATE TABLE refs (code TEXT, id INTEGER, classId INTEGER, refId INTEGER, fieldName TEXT);
+	CREATE TABLE refs (code TEXT, id INTEGER, classId INTEGER, refId INTEGER, fieldId INTEGER);
+	CREATE TABLE names (code TEXT, id INTEGER, name TEXT);
 
 to import into these tables you'll need to run commands similar to the following:
 
@@ -57,6 +59,7 @@ to import into these tables you'll need to run commands similar to the following
 	.import /path/to/classes classes
 	.import /path/to/instances instances
 	.import /path/to/references refs
+	.import /path/to/names refs
 
 I suggest the following indexes once you have imported all of your data:
 

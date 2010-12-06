@@ -351,6 +351,7 @@ long long int readLongLongInt(FILE *f) {
 	FILE *instancesFile;
 	FILE *classesFile;
 	FILE *referencesFile;
+	FILE *namesFile;
 	
 	std::map<long int, std::string> nameFromId;
 	std::map<int, std::string> classNameFromSerialNumber;
@@ -358,7 +359,7 @@ long long int readLongLongInt(FILE *f) {
 	std::map<long int, StackFrame> stackFrameFromId;
 	std::map<long int, long int> superIdFromClassId;
 	std::map<long int, std::vector<char> > fieldTypesFromClassId;
-	std::map<long int, std::vector<std::string> > fieldNamesFromClassId;
+	std::map<long int, std::vector<long int> > fieldNameIdsFromClassId;
 
 	size_t readValue(FILE *input) {
 		char type;
@@ -462,13 +463,12 @@ long long int readLongLongInt(FILE *f) {
 
 		    fprintf (instancesFile, "AP %lu %lu %lu\n", id, elementClassID, (unsigned long)elSize*num);
 		} else {
-		    int arrayClassID = 0;
 		    int sz = num * identifierSize;
 		    bytesRead += sz;
 		    fprintf(instancesFile, "AO %lu %lu %lu\n", id, elementClassID, identifierSize*num);
 		    for (int i = 0; i < num; i++) {
 			long int idElement = readIdentifier(input);
-			fprintf(referencesFile, "RF %lu %lu %lu []\n", id, elementClassID, idElement);
+			fprintf(referencesFile, "RF %lu %lu %lu 0\n", id, elementClassID, idElement);
 		    }
 		}
 		return bytesRead;
@@ -503,7 +503,7 @@ long long int readLongLongInt(FILE *f) {
 		int numStatics = readUnsignedShort(input);
 		bytesRead += 2;
 		std::vector<long int> staticReferences;
-		std::vector<std::string> staticNames;
+		std::vector<long int> staticNameIds;
 		for (int i = 0; i < numStatics; i++) {
 		    long int nameId = readIdentifier(input);
 		    assert(nameFromId.find(nameId) != nameFromId.end());
@@ -512,7 +512,7 @@ long long int readLongLongInt(FILE *f) {
 		    bytesRead++;
 		    if(T_CLASS == type) {
 			    staticReferences.push_back(readIdentifier(input));
-			    staticNames.push_back(nameFromId[nameId]);
+			    staticNameIds.push_back(nameId);
 			    bytesRead += identifierSize;
 		    }
 		    else {
@@ -523,7 +523,7 @@ long long int readLongLongInt(FILE *f) {
 		int numFields = readUnsignedShort(input);
 		bytesRead += 2;
 		fieldTypesFromClassId[id] = std::vector<char>();
-		fieldNamesFromClassId[id] = std::vector<std::string>();
+		fieldNameIdsFromClassId[id] = std::vector<long int>();
 		for (int i = 0; i < numFields; i++) {
 		    long int nameId = readIdentifier(input);
 		    assert(nameFromId.find(nameId) != nameFromId.end());
@@ -532,12 +532,15 @@ long long int readLongLongInt(FILE *f) {
 		    char type = readByte(input);
 		    bytesRead++;
 		    fieldTypesFromClassId[id].push_back(type);
-		    fieldNamesFromClassId[id].push_back(nameFromId[nameId]);
+		    fieldNameIdsFromClassId[id].push_back(nameId);
 		}
-
+		
+		//output the class definition
 		fprintf(classesFile, "CL %lu %lu %s %d\n", id, superId, classNameFromObjectId[id].c_str(), bytesRead);
+		//also output an instance definition so that all the sizes match up
+		fprintf(instancesFile, "CL %lu %lu %lu\n", id, id, (unsigned long)bytesRead);
 		for(int i=0; i<staticReferences.size();i++) {
-			fprintf(referencesFile, "RF %lu %lu %lu %s\n", id, id, staticReferences[i], staticNames[i].c_str());
+			fprintf(referencesFile, "RF %lu %lu %lu %lu\n", id, id, staticReferences[i], staticNameIds[i]);
 		}
 
 		return bytesRead;
@@ -567,13 +570,13 @@ long long int readLongLongInt(FILE *f) {
 		long int currentClassId = classId;
 		while(currentClassId != 0) {
 			assert(fieldTypesFromClassId.find(currentClassId) != fieldTypesFromClassId.end());
-			assert(fieldNamesFromClassId.find(currentClassId) != fieldNamesFromClassId.end());
+			assert(fieldNameIdsFromClassId.find(currentClassId) != fieldNameIdsFromClassId.end());
 			std::vector<char> fields = fieldTypesFromClassId[currentClassId];
-			std::vector<std::string> fieldNames = fieldNamesFromClassId[currentClassId];
+			std::vector<long int> fieldNameIds = fieldNameIdsFromClassId[currentClassId];
 			for(int i=0; i<fields.size(); i++) {
 				if(T_CLASS == fields[i]) {                                     	
                                         long int referenceId = readIdentifier(input);
-					fprintf(referencesFile, "RF %lu %lu %lu %s\n", id, currentClassId, referenceId, fieldNames[i].c_str());
+					fprintf(referencesFile, "RF %lu %lu %lu %lu\n", id, currentClassId, referenceId, fieldNameIds[i]);
 					bytesRead += identifierSize;
                                 }
                                 else {
@@ -712,7 +715,7 @@ long long int readLongLongInt(FILE *f) {
 	}
 
 	int main(int argc, char **argv) {
-		assert(argc > 4);
+		assert(argc > 5);
 		FILE *input;
 		if(strcmp(argv[1], "-") == 0) {
 			input = stdin;
@@ -738,6 +741,13 @@ long long int readLongLongInt(FILE *f) {
 		else {
 			referencesFile = fopen(argv[4], "w");
 		}
+		if(strcmp(argv[5], "-") == 0) {
+			namesFile = stdout;
+		}
+		else {
+			namesFile = fopen(argv[5], "w");
+		}
+
 
 
 		int ret;
@@ -819,12 +829,15 @@ long long int readLongLongInt(FILE *f) {
 				long int classId;
 				int stackTraceSerialNumber;
 				long int classNameId;
+				std::string name;
 				switch(recordType) {
 					case HPROF_UTF8 :
 						assert(recordLength >= identifierSize);
 						id = readIdentifier(record);
 						record[recordLength]=0;
-						nameFromId[id] = std::string(record+identifierSize);
+						name = std::string(record+identifierSize);
+						nameFromId[id] = name;
+						fprintf(namesFile, "NA %lu %s\n", id, name.c_str());
 						break;
 					case HPROF_LOAD_CLASS :
 						assert(recordLength == sizeof(int)*2 + identifierSize*2);
@@ -862,6 +875,7 @@ long long int readLongLongInt(FILE *f) {
 		fclose(classesFile);
 		fclose(instancesFile);
 		fclose(referencesFile);
+		fclose(namesFile);
 	}
 
 

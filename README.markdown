@@ -55,7 +55,6 @@ to that end here's a simple schema for sqlite3:
 
 to import into these tables you'll need to run commands similar to the following:
 
-	.separator ' '
 	.import /path/to/classes classes
 	.import /path/to/instances instances
 	.import /path/to/references refs
@@ -71,6 +70,17 @@ I suggest the following indexes once you have imported all of your data:
 	CREATE INDEX rrid ON refs (refId);
 
 Note that creating all of these indexes will take many minutes for large dumps and will more than double the size of the resulting database. This should not be a problem since you won't be inserting into these tables and the indexes are critical for analysis.
+
+All of this can be somewhat automated by sql scripts included in this distribution:
+
+	PRAGMA synchronous = OFF;
+	.separator '	'
+	.read schema.sql
+	.import /tmp/heapdump/names names
+	.import /tmp/heapdump/classes classes
+	.import /tmp/heapdump/instances instance
+	.import /tmp/heapdump/references refs
+	.read indexes.sql
 
 ### Finding Simple Info About Instances
 

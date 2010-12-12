@@ -159,6 +159,52 @@ const char *getDumpRecordName(char recordType) {
 //	"HPROF_GC_ROOT_UNKNOWN",//       = 0xff;
 const size_t MAX_RECORD_SIZE_IN_MEMORY = 1024*1240*50;
 
+unsigned char escapeXlateTable[256] = {
+	0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08, 't', 'n',0x0b,0x0c, 'r',0x0e,0x0f,
+	0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
+	0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,
+	0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x3a,0x3b,0x3c,0x3d,0x3e,0x3f,
+	0x40,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
+	0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x5b,0x5c,0x5d,0x5e,0x5f,
+	0x60,0x61,0x62,0x63,0x64,0x65,0x66,0x67,0x68,0x69,0x6a,0x6b,0x6c,0x6d,0x6e,0x6f,
+	0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7a,0x7b,0x7c,0x7d,0x7e,0x7f,
+	0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,
+	0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9a,0x9b,0x9c,0x9d,0x9e,0x9f,
+	0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,0xa8,0xa9,0xaa,0xab,0xac,0xad,0xae,0xaf,
+	0xb0,0xb1,0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,0xb8,0xb9,0xba,0xbb,0xbc,0xbd,0xbe,0xbf,
+	0xc0,0xc1,0xc2,0xc3,0xc4,0xc5,0xc6,0xc7,0xc8,0xc9,0xca,0xcb,0xcc,0xcd,0xce,0xcf,
+	0xd0,0xd1,0xd2,0xd3,0xd4,0xd5,0xd6,0xd7,0xd8,0xd9,0xda,0xdb,0xdc,0xdd,0xde,0xdf,
+	0xe0,0xe1,0xe2,0xe3,0xe4,0xe5,0xe6,0xe7,0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xef,
+	0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfd,0xfe,0xff
+};
+
+char *strEscapeBuffer = NULL;
+size_t strEscapeBufferCapacity = 0;
+const char *escapeString(std::string strToEscape) {
+	if(strEscapeBufferCapacity < strToEscape.length()*2+1) {
+		size_t desiredCapacity = std::max(strToEscape.length()*2+1, strEscapeBufferCapacity*2);
+		fprintf(stderr, "escape buffer is too small (%lu, %lu) growing to %lu\n", strEscapeBufferCapacity, strToEscape.length()+1, desiredCapacity);
+		strEscapeBuffer = (char *)realloc(strEscapeBuffer, desiredCapacity);
+		strEscapeBufferCapacity = desiredCapacity;
+	}
+	const char *ePtr = strToEscape.c_str();
+	char *ptr = strEscapeBuffer;
+	for(;*ePtr;ePtr++) {
+		assert(ptr - strEscapeBuffer < strEscapeBufferCapacity);
+		if(escapeXlateTable[*ePtr] != *ePtr) {
+			ptr[0] = '/';
+			ptr[1] = escapeXlateTable[*ePtr];
+			ptr+=2;
+		}
+		else {
+			ptr[0] = *ePtr;
+			ptr++;
+		}
+	}
+	*ptr = 0;
+	return strEscapeBuffer;
+}
+
 FILE *dataFile = NULL;
 
 size_t identifierSize = 0;
@@ -353,6 +399,7 @@ struct StackFrame {
 struct FieldInfo {
 	char typeCode;
 	long int fieldNameId;
+	long int classId;
 };
 
 FILE *instancesFile;
@@ -365,6 +412,8 @@ std::map<long int, std::string> classNameFromObjectId;
 std::map<long int, StackFrame> stackFrameFromId;
 std::map<long int, long int> superIdFromClassId;
 std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassId;
+
+std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassIdToRoot;
 
 size_t readValueForType(char type, FILE *input) {
 	size_t vSize = getJavaValueSize(signatureFromTypeId(type));
@@ -399,79 +448,79 @@ int readArray(FILE *input, bool isPrimitive) {
 	// Check for primitive arrays:
 	char primitiveSignature = 0x00;
 	int elSize = 0;
-	std::string primArrType = "";
+	//std::string primArrType = "";
 	if (isPrimitive) {
 	    switch (elementClassID) {
 		case T_BOOLEAN: {
 		    primitiveSignature = 'Z';
 		    elSize = 1;
-		    primArrType = "boolean[]";
+		    //primArrType = "boolean[]";
 		    break;
 		}
 		case T_CHAR: {
 		    primitiveSignature = 'C';
 		    elSize = 2;
-		    primArrType = "char[]";
+		    //primArrType = "char[]";
 		    break;
 		}
 		case T_FLOAT: {
 		    primitiveSignature = 'F';
 		    elSize = 4;
-		    primArrType = "float[]";
+		    //primArrType = "float[]";
 		    break;
 		}
 		case T_DOUBLE: {
 		    primitiveSignature = 'D';
 		    elSize = 8;
-		    primArrType = "double[]";
+		    //primArrType = "double[]";
 		    break;
 		}
 		case T_BYTE: {
 		    primitiveSignature = 'B';
 		    elSize = 1;
-		    primArrType = "byte[]";
+		    //primArrType = "byte[]";
 		    break;
 		}
 		case T_SHORT: {
 		    primitiveSignature = 'S';
 		    elSize = 2;
-		    primArrType = "short[]";
+		    //primArrType = "short[]";
 		    break;
 		}
 		case T_INT: {
 		    primitiveSignature = 'I';
 		    elSize = 4;
-		    primArrType = "int[]";
+		    //primArrType = "int[]";
 		    break;
 		}
 		case T_LONG: {
 		    primitiveSignature = 'J';
 		    elSize = 8;
-		    primArrType = "long[]";
+		    //primArrType = "long[]";
 		    break;
 		}
 	    }
 	}
 	else {
-	    if(classNameFromObjectId.find(elementClassID) != classNameFromObjectId.end()) {
-		    primArrType = "???";
-	    }
-	    else {
-		    primArrType = classNameFromObjectId[elementClassID];
-	    }
+	    //if(classNameFromObjectId.find(elementClassID) != classNameFromObjectId.end()) {
+		//    primArrType = "???";
+	    //}
+	    //else {
+	//	    primArrType = classNameFromObjectId[elementClassID];
+	  //  }
 	}
 	if (primitiveSignature != 0x00) {
 	    skipBytes(input, elSize*num);
 	    bytesRead += elSize*num;
 
-	    fprintf (instancesFile, "AP %lu %lu %lu\n", id, elementClassID, (unsigned long)elSize*num);
+	    fprintf (instancesFile, "AP\t%lu\t%lu\t%lu\n", id, elementClassID, (unsigned long)elSize*num);
 	} else {
 	    int sz = num * identifierSize;
 	    bytesRead += sz;
-	    fprintf(instancesFile, "AO %lu %lu %lu\n", id, elementClassID, identifierSize*num);
+	    fprintf(instancesFile, "AO\t%lu\t%lu\t%lu\n", id, elementClassID, identifierSize*num);
 	    for (int i = 0; i < num; i++) {
 		long int idElement = readIdentifier(input);
-		fprintf(referencesFile, "RF %lu %lu %lu 0\n", id, elementClassID, idElement);
+		fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", id, idElement);
 	    }
 	}
 	return bytesRead;
@@ -540,18 +589,41 @@ int readClass(FILE *input) {
 	    FieldInfo info;
 	    info.typeCode = type;
 	    info.fieldNameId = nameId;
+	    info.classId = id;
 	    fieldInfoFromClassId[id].push_back(info);
 	}
 	
 	//output the class definition
-	fprintf(classesFile, "CL %lu %lu %s %d\n", id, superId, classNameFromObjectId[id].c_str(), bytesRead);
+	fprintf(classesFile, "CL\t%lu\t%lu\t%s\t%d\n", id, superId, classNameFromObjectId[id].c_str(), bytesRead);
 	//also output an instance definition so that all the sizes match up
-	fprintf(instancesFile, "CL %lu %lu %lu\n", id, id, (unsigned long)bytesRead);
+	fprintf(instancesFile, "CL\t%lu\t%lu\t%lu\n", id, id, (unsigned long)bytesRead);
 	for(int i=0; i<staticReferences.size();i++) {
-		fprintf(referencesFile, "RF %lu %lu %lu %lu\n", id, id, staticReferences[i], staticNameIds[i]);
+		fprintf(referencesFile, "RF\t%lu\t%lu\t%lu\n", id, staticReferences[i], staticNameIds[i]);
 	}
 
 	return bytesRead;
+}
+
+std::vector<FieldInfo> resolveClassToRoot(long int classId) {
+	std::map<long int, std::vector<FieldInfo> >::iterator itr;
+	itr = fieldInfoFromClassIdToRoot.find(classId);
+	if(itr != fieldInfoFromClassIdToRoot.end()) {
+		return (*itr).second;
+	}
+	std::vector<FieldInfo> fieldInfos;
+	long int currentClassId = classId;
+	while(currentClassId != 0) {
+		std::map<long int, std::vector<FieldInfo> >::iterator itr = fieldInfoFromClassId.find(currentClassId);
+		assert(itr != fieldInfoFromClassId.end());
+		std::vector<FieldInfo> fields = (*itr).second;
+		for(int i=0; i<fields.size(); i++) {
+			fieldInfos.push_back(fields[i]);
+		}
+		assert(superIdFromClassId.find(currentClassId) != superIdFromClassId.end());
+		currentClassId = superIdFromClassId[currentClassId];
+	}
+	fieldInfoFromClassIdToRoot[classId] = fieldInfos;
+	return fieldInfos;
 }
 
 size_t readInstance(FILE *input) {
@@ -571,29 +643,31 @@ size_t readInstance(FILE *input) {
 	int b4 = b[3] & 0xff;
 	// Get the # of bytes for the field values:
 	size_t bytesFollowing = (b1 << 24) | (b2 << 16) | (b3 << 8) | (b4 << 0);
-	assert(classNameFromObjectId.find(classId) != classNameFromObjectId.end());
-	fprintf(instancesFile, "IN %lu %lu %lu\n", id, classId, bytesFollowing+size);
+	//the following assert is very expensive just to make sure we've ready the class def
+	//assert(classNameFromObjectId.find(classId) != classNameFromObjectId.end());
+	fprintf(instancesFile, "IN\t%lu\t%lu\t%lu\n", id, classId, bytesFollowing+size);
 	size_t bytesRead = 0;
 
 	//go up the class hierarchy (super class relationships
 	//	reading in fields definied by each ancestor class
-	long int currentClassId = classId;
-	while(currentClassId != 0) {
-		assert(fieldInfoFromClassId.find(currentClassId) != fieldInfoFromClassId.end());
-		std::vector<FieldInfo> fields = fieldInfoFromClassId[currentClassId];
+	//long int currentClassId = classId;
+	//while(currentClassId != 0) {
+	//	std::map<long int, std::vector<FieldInfo> >::iterator itr = fieldInfoFromClassId.find(currentClassId);
+	//	assert(itr != fieldInfoFromClassId.end());
+		std::vector<FieldInfo> fields = resolveClassToRoot(classId);
 		for(int i=0; i<fields.size(); i++) {
 			if(T_CLASS == fields[i].typeCode) {                                     	
 				long int referenceId = readIdentifier(input);
-				fprintf(referencesFile, "RF %lu %lu %lu %lu\n", id, currentClassId, referenceId, fields[i].fieldNameId);
+				fprintf(referencesFile, "RF\t%lu\t%lu\t%lu\n", id, referenceId, fields[i].fieldNameId);
 				bytesRead += identifierSize;
 			}
 			else {
 				bytesRead += readValueForType(fields[i].typeCode, input);
 			}
 		}
-		assert(superIdFromClassId.find(currentClassId) != superIdFromClassId.end());
-		currentClassId = superIdFromClassId[currentClassId];
-	}
+	//	assert(superIdFromClassId.find(currentClassId) != superIdFromClassId.end());
+	//	currentClassId = superIdFromClassId[currentClassId];
+	//}
 	assert(bytesFollowing == bytesRead);
 
 	return size + bytesFollowing;
@@ -845,7 +919,7 @@ int main(int argc, char **argv) {
 					record[recordLength]=0;
 					name = std::string(record+identifierSize);
 					nameFromId[id] = name;
-					fprintf(namesFile, "NA %lu %s\n", id, name.c_str());
+					fprintf(namesFile, "NA\t%lu\t%s\n", id, escapeString(name));
 					break;
 				case HPROF_LOAD_CLASS :
 					assert(recordLength == sizeof(int)*2 + identifierSize*2);

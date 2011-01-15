@@ -14,6 +14,8 @@
 #define ntohll(x) ( ( (uint64_t)(ntohl( (uint32_t)((x << 32) >> 32) )) << 32) | ntohl( ((uint32_t)(x >> 32)) ) )
 #define htonll(x) ntohll(x)
 
+const unsigned long long VIRTUAL_ROOT_ID = 0;
+
 //
 // Record types:
 //
@@ -403,7 +405,9 @@ struct FieldInfo {
 };
 
 FILE *instancesFile;
+FILE *instancesFileBinary = NULL;
 FILE *classesFile;
+FILE *referencesFileBinary = NULL;
 FILE *referencesFile;
 FILE *namesFile;
 
@@ -414,6 +418,21 @@ std::map<long int, long int> superIdFromClassId;
 std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassId;
 
 std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassIdToRoot;
+
+void addInstance(unsigned long long id, unsigned long long classId, const char * typeCode, size_t size) {
+	fprintf (instancesFile, "%s\t%lu\t%lu\t%lu\n", typeCode, id, classId, size);
+	if(instancesFileBinary) {
+		fwrite(&id, sizeof(unsigned long long), 1, instancesFileBinary);
+	}
+}
+
+void addReference(unsigned long long from, unsigned long long to, unsigned long long nameId) {
+	fprintf(referencesFile, "RF\t%llu\t%llu\t%llu\t\n", from, to, nameId);
+	if(referencesFileBinary) {
+		fwrite(&from, sizeof(unsigned long long), 1, referencesFileBinary);
+		fwrite(&to, sizeof(unsigned long long), 1, referencesFileBinary);
+	}
+}
 
 size_t readValueForType(char type, FILE *input) {
 	size_t vSize = getJavaValueSize(signatureFromTypeId(type));
@@ -512,15 +531,14 @@ int readArray(FILE *input, bool isPrimitive) {
 	if (primitiveSignature != 0x00) {
 	    skipBytes(input, elSize*num);
 	    bytesRead += elSize*num;
-
-	    fprintf (instancesFile, "AP\t%lu\t%lu\t%lu\n", id, elementClassID, (unsigned long)elSize*num);
+		addInstance(id, elementClassID, "AP", elSize*num);
 	} else {
 	    int sz = num * identifierSize;
 	    bytesRead += sz;
-	    fprintf(instancesFile, "AO\t%lu\t%lu\t%lu\n", id, elementClassID, identifierSize*num);
+		addInstance(id, elementClassID, "AO", identifierSize*num);
 	    for (int i = 0; i < num; i++) {
-		long int idElement = readIdentifier(input);
-		fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", id, idElement);
+			long int idElement = readIdentifier(input);
+			addReference(id, idElement, 0);
 	    }
 	}
 	return bytesRead;
@@ -596,9 +614,9 @@ int readClass(FILE *input) {
 	//output the class definition
 	fprintf(classesFile, "CL\t%lu\t%lu\t%s\t%d\n", id, superId, classNameFromObjectId[id].c_str(), bytesRead);
 	//also output an instance definition so that all the sizes match up
-	fprintf(instancesFile, "CL\t%lu\t%lu\t%lu\n", id, id, (unsigned long)bytesRead);
+	addInstance(id, id, "CL", bytesRead);
 	for(int i=0; i<staticReferences.size();i++) {
-		fprintf(referencesFile, "RF\t%lu\t%lu\t%lu\n", id, staticReferences[i], staticNameIds[i]);
+		addReference(id, staticReferences[i], staticNameIds[i]);
 	}
 
 	return bytesRead;
@@ -645,7 +663,7 @@ size_t readInstance(FILE *input) {
 	size_t bytesFollowing = (b1 << 24) | (b2 << 16) | (b3 << 8) | (b4 << 0);
 	//the following assert is very expensive just to make sure we've ready the class def
 	//assert(classNameFromObjectId.find(classId) != classNameFromObjectId.end());
-	fprintf(instancesFile, "IN\t%lu\t%lu\t%lu\n", id, classId, bytesFollowing+size);
+	addInstance(id, classId, "IN", bytesFollowing+size);
 	size_t bytesRead = 0;
 
 	//go up the class hierarchy (super class relationships
@@ -658,7 +676,7 @@ size_t readInstance(FILE *input) {
 		for(int i=0; i<fields.size(); i++) {
 			if(T_CLASS == fields[i].typeCode) {                                     	
 				long int referenceId = readIdentifier(input);
-				fprintf(referencesFile, "RF\t%lu\t%lu\t%lu\n", id, referenceId, fields[i].fieldNameId);
+				addReference(id, referenceId, fields[i].fieldNameId);
 				bytesRead += identifierSize;
 			}
 			else {
@@ -695,7 +713,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 			fprintf(stderr, "found HPROF_GC_ROOT_UNKNOWN\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
-			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    break;
 		}
 		case HPROF_GC_ROOT_THREAD_OBJ: {
@@ -706,7 +724,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 			fprintf(stderr, "found HPROF_GC_ROOT_THREAD_OBJ\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
-			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*threadObjects.put(new Integer(threadSeq), new ThreadObject(id, stackSeq));*/
 		    break;
 		}
@@ -716,6 +734,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    bytesLeft -= 2*identifierSize;
 			fprintf(stderr, "found HPROF_GC_ROOT_JNI_GLOBAL\n");
 			rootsFound++;
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*snapshot.addRoot(new Root(id, 0, Root.NATIVE_STATIC, ""));*/
 		    break;
 		}
@@ -727,7 +746,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 			fprintf(stderr, "found HPROF_GC_ROOT_JNI_LOCAL\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
-			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    if (st != null) {
@@ -744,7 +763,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 			fprintf(stderr, "found HPROF_GC_ROOT_JAVA_FRAME\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
-			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    if (st != null) {
@@ -760,7 +779,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 			fprintf(stderr, "found HPROF_GC_ROOT_NATIVE_STACK\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
-			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    snapshot.addRoot(new Root(id, to.threadId, Root.NATIVE_STACK, "", st));*/
@@ -772,7 +791,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 			fprintf(stderr, "found HPROF_GC_ROOT_SICKY_CLASS\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
-			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*snapshot.addRoot(new Root(id, 0, Root.SYSTEM_CLASS, ""));*/
 		    break;
 		}
@@ -783,7 +802,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 			fprintf(stderr, "found HPROF_GC_ROOT_THREAD_BLOCK\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
-			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    snapshot.addRoot(new Root(id, to.threadId, 
@@ -796,7 +815,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 			fprintf(stderr, "found HPROF_GC_ROOT_MONITOR_USED\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
-			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
+			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*snapshot.addRoot(new Root(id, 0, Root.BUSY_MONITOR, ""));*/
 		    break;
 		}
@@ -853,12 +872,18 @@ int main(int argc, char **argv) {
 	}
 	else {
 		instancesFile = fopen(argv[3], "w");
+		char fileNameBinary[1024];
+		sprintf(fileNameBinary, "%s.binary", argv[3]);
+		instancesFileBinary = fopen(fileNameBinary, "w");
 	}
 	if(strcmp(argv[4], "-") == 0) {
 		referencesFile = stdout;
 	}
 	else {
 		referencesFile = fopen(argv[4], "w");
+		char refFileNameBinary[1024];
+		sprintf(refFileNameBinary, "%s.binary", argv[4]);
+		referencesFileBinary = fopen(refFileNameBinary, "w");
 	}
 	if(strcmp(argv[5], "-") == 0) {
 		namesFile = stdout;
@@ -1005,7 +1030,13 @@ int main(int argc, char **argv) {
 
 	fclose(classesFile);
 	fclose(instancesFile);
+	if(instancesFileBinary) {
+		fclose(instancesFileBinary);
+	}
 	fclose(referencesFile);
+	if(referencesFileBinary) {
+		fclose(referencesFileBinary);
+	}
 	fclose(namesFile);
 }
 

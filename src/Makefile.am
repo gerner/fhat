@@ -1,5 +1,6 @@
 AM_CXXFLAGS = -std=c++0x -Wall -O0 -g
 
-bin_PROGRAMS = fhat closure
+bin_PROGRAMS = fhat sort pack
 fhat_SOURCES = fhat.cc
-closure_SOURCES = closure.cc
+sort_SOURCES = sort.cc
+pack_SOURCES = pack.cc

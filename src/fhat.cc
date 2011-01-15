@@ -165,7 +165,7 @@ unsigned char escapeXlateTable[256] = {
 	0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,
 	0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x3a,0x3b,0x3c,0x3d,0x3e,0x3f,
 	0x40,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
-	0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x5b,0x5c,0x5d,0x5e,0x5f,
+	0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x5b,'\\',0x5d,0x5e,0x5f,
 	0x60,0x61,0x62,0x63,0x64,0x65,0x66,0x67,0x68,0x69,0x6a,0x6b,0x6c,0x6d,0x6e,0x6f,
 	0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7a,0x7b,0x7c,0x7d,0x7e,0x7f,
 	0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,
@@ -192,7 +192,7 @@ const char *escapeString(std::string strToEscape) {
 	for(;*ePtr;ePtr++) {
 		assert(ptr - strEscapeBuffer < strEscapeBufferCapacity);
 		if(escapeXlateTable[*ePtr] != *ePtr) {
-			ptr[0] = '/';
+			ptr[0] = '\\';
 			ptr[1] = escapeXlateTable[*ePtr];
 			ptr+=2;
 		}
@@ -672,11 +672,11 @@ size_t readInstance(FILE *input) {
 
 	return size + bytesFollowing;
 }
+unsigned long long rootsFound = 0;
 int readHeapDump(FILE *input, size_t dumpSize) {
 	int ret;
 	fprintf(stderr, "heap dump of size %lu bytes\n", dumpSize);
 	
-
 	size_t dumpStartPosition = positionInFile;
 	size_t bytesLeft = dumpSize;
 	char recordType;
@@ -700,6 +700,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    int threadSeq = readInt(input);
 		    int stackSeq = readInt(input);
 		    bytesLeft -= identifierSize + 8;
+			fprintf(stderr, "found HPROF_GC_ROOT_THREAD_OBJ\n");
+			rootsFound++;
 		    /*threadObjects.put(new Integer(threadSeq), new ThreadObject(id, stackSeq));*/
 		    break;
 		}
@@ -707,6 +709,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    long int id = readIdentifier(input);
 		    int globalRefId = readIdentifier(input);	// Ignored, for now
 		    bytesLeft -= 2*identifierSize;
+			fprintf(stderr, "found HPROF_GC_ROOT_JNI_GLOBAL\n");
+			rootsFound++;
 		    /*snapshot.addRoot(new Root(id, 0, Root.NATIVE_STATIC, ""));*/
 		    break;
 		}
@@ -715,6 +719,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    int threadSeq = readInt(input);
 		    int depth = readInt(input);
 		    bytesLeft -= identifierSize + 8;
+			fprintf(stderr, "found HPROF_GC_ROOT_JNI_LOCAL\n");
+			rootsFound++;
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    if (st != null) {
@@ -728,6 +734,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    int threadSeq = readInt(input);
 		    int depth = readInt(input);
 		    bytesLeft -= identifierSize + 8;
+			fprintf(stderr, "found HPROF_GC_ROOT_JAVA_FRAME\n");
+			rootsFound++;
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    if (st != null) {
@@ -740,6 +748,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    long int id = readIdentifier(input);
 		    int threadSeq = readInt(input);
 		    bytesLeft -= identifierSize + 4;
+			fprintf(stderr, "found HPROF_GC_ROOT_NATIVE_STACK\n");
+			rootsFound++;
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    snapshot.addRoot(new Root(id, to.threadId, Root.NATIVE_STACK, "", st));*/
@@ -748,6 +758,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		case HPROF_GC_ROOT_STICKY_CLASS: {
 		    long int id = readIdentifier(input);
 		    bytesLeft -= identifierSize;
+			fprintf(stderr, "found HPROF_GC_ROOT_SICKY_CLASS\n");
+			rootsFound++;
 		    /*snapshot.addRoot(new Root(id, 0, Root.SYSTEM_CLASS, ""));*/
 		    break;
 		}
@@ -755,6 +767,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    long int id = readIdentifier(input);
 		    int threadSeq = readInt(input);
 		    bytesLeft -= identifierSize + 4;
+			fprintf(stderr, "found HPROF_GC_ROOT_THREAD_BLOCK\n");
+			rootsFound++;
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    snapshot.addRoot(new Root(id, to.threadId, 
@@ -764,6 +778,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		case HPROF_GC_ROOT_MONITOR_USED: {
 		    long int id = readIdentifier(input);
 		    bytesLeft -= identifierSize;
+			fprintf(stderr, "found HPROF_GC_ROOT_MONITOR_USED\n");
+			rootsFound++;
 		    /*snapshot.addRoot(new Root(id, 0, Root.BUSY_MONITOR, ""));*/
 		    break;
 		}
@@ -863,6 +879,8 @@ int main(int argc, char **argv) {
 	size_t recordLength;
 
 	unsigned long long numRecords = 0;
+	unsigned long long unknownRecords = 0;
+	unsigned long long threadRecords = 0;
 		
 	while(true) {
 		if(feof(input)) {
@@ -945,7 +963,17 @@ int main(int argc, char **argv) {
 							readInt(record),
 							readInt(record));
 					break;
-				//default :
+				case HPROF_TRACE :
+					//we're not tracking stack traces at the moment, so skip it
+					//serialNo
+					//threadSeq
+					//# of frames
+					//frames:
+					//	id
+					break;
+				default :
+					fprintf(stderr, "unknown record %d of size %lu (%s)\n", (int)recordType, recordLength, getRecordName(recordType)); 
+					unknownRecords++;
 					//no op
 			}
 		}
@@ -955,6 +983,8 @@ int main(int argc, char **argv) {
 	fprintf(stderr, "%lu names\n", nameFromId.size());
 	fprintf(stderr, "%lu classes\n", classNameFromObjectId.size());
 	fprintf(stderr, "%lu frames\n", stackFrameFromId.size());
+	fprintf(stderr, "%llu unknown records\n", unknownRecords);
+	fprintf(stderr, "%llu roots\n", rootsFound);
 
 	fclose(classesFile);
 	fclose(instancesFile);

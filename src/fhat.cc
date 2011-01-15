@@ -689,12 +689,15 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		bytesLeft--;
 		records++;
 		switch(recordType) {
-		/*case HPROF_GC_ROOT_UNKNOWN: {
+		case HPROF_GC_ROOT_UNKNOWN: {
 		    long int id = readIdentifier(input);
 		    bytesLeft -= identifierSize;
-		    snapshot.addRoot(new Root(id, 0, Root.UNKNOWN, ""));
+			fprintf(stderr, "found HPROF_GC_ROOT_UNKNOWN\n");
+			rootsFound++;
+			//we model gc roots as a reference to the root object from null
+			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
 		    break;
-		}*/
+		}
 		case HPROF_GC_ROOT_THREAD_OBJ: {
 		    long int id = readIdentifier(input);
 		    int threadSeq = readInt(input);
@@ -702,6 +705,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    bytesLeft -= identifierSize + 8;
 			fprintf(stderr, "found HPROF_GC_ROOT_THREAD_OBJ\n");
 			rootsFound++;
+			//we model gc roots as a reference to the root object from null
+			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
 		    /*threadObjects.put(new Integer(threadSeq), new ThreadObject(id, stackSeq));*/
 		    break;
 		}
@@ -721,6 +726,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    bytesLeft -= identifierSize + 8;
 			fprintf(stderr, "found HPROF_GC_ROOT_JNI_LOCAL\n");
 			rootsFound++;
+			//we model gc roots as a reference to the root object from null
+			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    if (st != null) {
@@ -736,6 +743,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    bytesLeft -= identifierSize + 8;
 			fprintf(stderr, "found HPROF_GC_ROOT_JAVA_FRAME\n");
 			rootsFound++;
+			//we model gc roots as a reference to the root object from null
+			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    if (st != null) {
@@ -750,6 +759,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    bytesLeft -= identifierSize + 4;
 			fprintf(stderr, "found HPROF_GC_ROOT_NATIVE_STACK\n");
 			rootsFound++;
+			//we model gc roots as a reference to the root object from null
+			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    snapshot.addRoot(new Root(id, to.threadId, Root.NATIVE_STACK, "", st));*/
@@ -760,6 +771,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    bytesLeft -= identifierSize;
 			fprintf(stderr, "found HPROF_GC_ROOT_SICKY_CLASS\n");
 			rootsFound++;
+			//we model gc roots as a reference to the root object from null
+			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
 		    /*snapshot.addRoot(new Root(id, 0, Root.SYSTEM_CLASS, ""));*/
 		    break;
 		}
@@ -769,6 +782,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    bytesLeft -= identifierSize + 4;
 			fprintf(stderr, "found HPROF_GC_ROOT_THREAD_BLOCK\n");
 			rootsFound++;
+			//we model gc roots as a reference to the root object from null
+			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
 		    /*ThreadObject to = getThreadObjectFromSequence(threadSeq);
 		    StackTrace st = getStackTraceFromSerial(to.stackSeq);
 		    snapshot.addRoot(new Root(id, to.threadId, 
@@ -780,6 +795,8 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    bytesLeft -= identifierSize;
 			fprintf(stderr, "found HPROF_GC_ROOT_MONITOR_USED\n");
 			rootsFound++;
+			//we model gc roots as a reference to the root object from null
+			fprintf(referencesFile, "RF\t%lu\t%lu\t0\n", 0, id);
 		    /*snapshot.addRoot(new Root(id, 0, Root.BUSY_MONITOR, ""));*/
 		    break;
 		}

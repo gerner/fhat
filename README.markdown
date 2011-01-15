@@ -84,6 +84,10 @@ All of this can be somewhat automated by sql scripts included in this distributi
 
 ### Finding Simple Info About Instances
 
+find the top 50 classes whose instances account for the most memory:
+
+	SELECT classes.id, classes.name, COUNT(instances.id), SUM(instances.size) FROM classes JOIN instances ON classes.id = instances.classId GROUP BY classes.id, classes.name ORDER BY SUM(instances.size) DESC LIMIT 50
+
 find the number of Strings:
 
 	SELECT COUNT(instances.id), SUM(instances.size) FROM instances JOIN classes ON instances.classId = classes.id WHERE classes.name = "java/lang/String";

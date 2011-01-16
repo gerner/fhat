@@ -26,6 +26,11 @@ bool operator<(const Link &lhs, const Link &rhs) {
 }
 
 template <class T>
+int readRecord(T *buf, FILE *in) {
+	return fread(buf, sizeof(T), 1, in);
+}
+
+template <class T>
 struct SortedFile
 {
 	FILE *f;
@@ -42,7 +47,7 @@ struct SortedFile
 	}
 
 	bool readNext() {
-		return 1 == fread(this->next, sizeof(T), 1, this->f);
+		return 1 == readRecord(this->next, this->f);
 	}
 };
 
@@ -73,7 +78,7 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 		//read from in until we fill a buffer
 		T *bufPtr = buffer;
 		while(bufPtr + 1 < buffer + (SORT_BUFFER_SIZE/sizeof(T))) {
-			if(fread(bufPtr, sizeof(T), 1, in) != 1) {
+			if(1 != readRecord(bufPtr, in)) {
 				assert(feof(in));
 				foundEOF = true;
 				fprintf(stderr, "input closed\n");

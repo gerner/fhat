@@ -137,3 +137,24 @@ It's valuable to compare this to the total memory used by all objects (including
 
 Where 1234 appears high up in the list of object types above.
 
+## Domination!
+
+parse the dump
+	~/workspace/fhat/src/fhat heap.dump classes instances references names
+
+sort the instances
+	~/workspace/fhat/src/sort instances.binary instances.sorted id
+
+sort the references
+	~/workspace/fhat/src/sort references.binary references.sorted link
+
+pack the references
+	cat references.sorted | ~/workspace/fhat/src/pack instances.sorted > references.packed
+
+assert it's still sorted
+	~/workspace/fhat/src/sort references.packed /tmp/references.packed.sorted link
+	cmp references.packed /tmp/references.packed.sorted
+	rm /tmp/references.packed.sorted
+
+get the spanning tree by dfs
+	~/workspace/fhat/src/dfs references.packed semi vertex parent $((`stat -c %s instances.binary`/8))

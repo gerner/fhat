@@ -418,6 +418,7 @@ std::map<long int, long int> superIdFromClassId;
 std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassId;
 
 std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassIdToRoot;
+unsigned long long rootsFound = 0;
 
 void addInstance(unsigned long long id, unsigned long long classId, const char * typeCode, size_t size) {
 	fprintf (instancesFile, "%s\t%lu\t%lu\t%lu\n", typeCode, id, classId, size);
@@ -617,6 +618,8 @@ int readClass(FILE *input) {
 	addInstance(id, id, "CL", bytesRead);
 	for(int i=0; i<staticReferences.size();i++) {
 		addReference(id, staticReferences[i], staticNameIds[i]);
+		addReference(VIRTUAL_ROOT_ID, staticReferences[i], staticNameIds[i]);
+		rootsFound++;
 	}
 
 	return bytesRead;
@@ -690,10 +693,12 @@ size_t readInstance(FILE *input) {
 
 	return size + bytesFollowing;
 }
-unsigned long long rootsFound = 0;
 int readHeapDump(FILE *input, size_t dumpSize) {
 	int ret;
 	fprintf(stderr, "heap dump of size %lu bytes\n", dumpSize);
+
+	//write out virtual root as an instance
+	addInstance(0, 0, "VR", 0);
 	
 	size_t dumpStartPosition = positionInFile;
 	size_t bytesLeft = dumpSize;
@@ -975,6 +980,8 @@ int main(int argc, char **argv) {
 			long int classId;
 			int stackTraceSerialNumber;
 			long int classNameId;
+			int threadSeq;
+			int numFrames;
 			std::string name;
 			switch(recordType) {
 				case HPROF_UTF8 :
@@ -1007,9 +1014,9 @@ int main(int argc, char **argv) {
 					break;
 				case HPROF_TRACE :
 					//we're not tracking stack traces at the moment, so skip it
-					//serialNo
-					//threadSeq
-					//# of frames
+					serialNumber = readInt(record);
+					threadSeq = readInt(record + sizeof(int));
+					numFrames = readInt(record + sizeof(int)*2);
 					//frames:
 					//	id
 					break;

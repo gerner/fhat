@@ -42,9 +42,6 @@ unsigned long long numEdges;
 unsigned long long edgesConsidered = 0;
 
 unsigned long long dfs(unsigned long long v, unsigned long long n) {
-	if(n % (numNodes / 25) == 0) {
-		fprintf(stderr, "discovered node %llu: %llu\n", n, v);
-	}
 	unsigned long long descendants = 1;
 	semi[v] = n;
 	vertex[n] = v;

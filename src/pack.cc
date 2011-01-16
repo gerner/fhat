@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
 		assert(ptr >= nodes);
 		assert(ptr < nodes+numNodes);
 		if(!(0 == edge.dst || *ptr == edge.dst)) {
-			fprintf(stderr, "orphan (%llu,%llu) (dst) (%llu: %llu)\n", edge.src, edge.dst, *ptr, (unsigned long long)(ptr-nodes));
+			//fprintf(stderr, "orphan (%llu,%llu) (dst) (%llu: %llu)\n", edge.src, edge.dst, *ptr, (unsigned long long)(ptr-nodes));
 			orphans++;
 			if(orphansFile) {
 				fwrite(&edge, sizeof(Link), 1, orphansFile);

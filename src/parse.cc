@@ -182,14 +182,14 @@ unsigned char escapeXlateTable[256] = {
 
 char *strEscapeBuffer = NULL;
 size_t strEscapeBufferCapacity = 0;
-const char *escapeString(std::string strToEscape) {
-	if(strEscapeBufferCapacity < strToEscape.length()*2+1) {
-		size_t desiredCapacity = std::max(strToEscape.length()*2+1, strEscapeBufferCapacity*2);
-		fprintf(stderr, "escape buffer is too small (%lu, %lu) growing to %lu\n", strEscapeBufferCapacity, strToEscape.length()+1, desiredCapacity);
+const char *escapeString(const char *strToEscape) {
+	if(strEscapeBufferCapacity < strlen(strToEscape)*2+1) {
+		size_t desiredCapacity = std::max(strlen(strToEscape)*2+1, strEscapeBufferCapacity*2);
+		//fprintf(stderr, "escape buffer is too small (%lu, %lu) growing to %lu\n", strEscapeBufferCapacity, strlen(strToEscape)+1, desiredCapacity);
 		strEscapeBuffer = (char *)realloc(strEscapeBuffer, desiredCapacity);
 		strEscapeBufferCapacity = desiredCapacity;
 	}
-	const char *ePtr = strToEscape.c_str();
+	const char *ePtr = strToEscape;
 	char *ptr = strEscapeBuffer;
 	for(;*ePtr;ePtr++) {
 		assert(ptr - strEscapeBuffer < strEscapeBufferCapacity);
@@ -404,12 +404,12 @@ struct FieldInfo {
 	long int classId;
 };
 
-FILE *instancesFile;
+FILE *instancesFile = NULL;
 FILE *instancesFileBinary = NULL;
-FILE *classesFile;
+FILE *classesFile = NULL;
 FILE *referencesFileBinary = NULL;
-FILE *referencesFile;
-FILE *namesFile;
+FILE *referencesFile = NULL;
+FILE *namesFile = NULL;
 
 std::map<long int, std::string> nameFromId;
 std::map<long int, std::string> classNameFromObjectId;
@@ -421,17 +421,33 @@ std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassIdToRoot;
 unsigned long long rootsFound = 0;
 
 void addInstance(unsigned long long id, unsigned long long classId, const char * typeCode, size_t size) {
-	fprintf (instancesFile, "%s\t%lu\t%lu\t%lu\n", typeCode, id, classId, size);
+	if(instancesFile) {
+		fprintf (instancesFile, "%s\t%lu\t%lu\t%lu\n", typeCode, id, classId, size);
+	}
 	if(instancesFileBinary) {
 		fwrite(&id, sizeof(unsigned long long), 1, instancesFileBinary);
 	}
 }
 
 void addReference(unsigned long long from, unsigned long long to, unsigned long long nameId) {
-	fprintf(referencesFile, "RF\t%llu\t%llu\t%llu\t\n", from, to, nameId);
+	if(referencesFile) {
+		fprintf(referencesFile, "RF\t%llu\t%llu\t%llu\t\n", from, to, nameId);
+	}
 	if(referencesFileBinary) {
 		fwrite(&from, sizeof(unsigned long long), 1, referencesFileBinary);
 		fwrite(&to, sizeof(unsigned long long), 1, referencesFileBinary);
+	}
+}
+
+void addClass(unsigned long long id, unsigned long long superId, unsigned long long nameId, size_t size) {
+	if(classesFile) {
+		fprintf(classesFile, "CL\t%llu\t%llu\t%s\t%lu\n", id, superId, classNameFromObjectId[id].c_str(), size);
+	}
+}
+
+void addName(unsigned long long id, const char *name) {
+	if(namesFile) {
+		fprintf(namesFile, "NA\t%llu\t%s\n", id, escapeString(name));
 	}
 }
 
@@ -613,7 +629,7 @@ int readClass(FILE *input) {
 	}
 	
 	//output the class definition
-	fprintf(classesFile, "CL\t%lu\t%lu\t%s\t%d\n", id, superId, classNameFromObjectId[id].c_str(), bytesRead);
+	addClass(id, superId, 0, bytesRead);
 	//also output an instance definition so that all the sizes match up
 	addInstance(id, id, "CL", bytesRead);
 	for(int i=0; i<staticReferences.size();i++) {
@@ -715,7 +731,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		case HPROF_GC_ROOT_UNKNOWN: {
 		    long int id = readIdentifier(input);
 		    bytesLeft -= identifierSize;
-			fprintf(stderr, "found HPROF_GC_ROOT_UNKNOWN\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_UNKNOWN\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
 			addReference(VIRTUAL_ROOT_ID, id, 0);
@@ -726,7 +742,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    int threadSeq = readInt(input);
 		    int stackSeq = readInt(input);
 		    bytesLeft -= identifierSize + 8;
-			fprintf(stderr, "found HPROF_GC_ROOT_THREAD_OBJ\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_THREAD_OBJ\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
 			addReference(VIRTUAL_ROOT_ID, id, 0);
@@ -737,7 +753,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    long int id = readIdentifier(input);
 		    int globalRefId = readIdentifier(input);	// Ignored, for now
 		    bytesLeft -= 2*identifierSize;
-			fprintf(stderr, "found HPROF_GC_ROOT_JNI_GLOBAL\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_JNI_GLOBAL\n");
 			rootsFound++;
 			addReference(VIRTUAL_ROOT_ID, id, 0);
 		    /*snapshot.addRoot(new Root(id, 0, Root.NATIVE_STATIC, ""));*/
@@ -748,7 +764,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    int threadSeq = readInt(input);
 		    int depth = readInt(input);
 		    bytesLeft -= identifierSize + 8;
-			fprintf(stderr, "found HPROF_GC_ROOT_JNI_LOCAL\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_JNI_LOCAL\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
 			addReference(VIRTUAL_ROOT_ID, id, 0);
@@ -765,7 +781,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    int threadSeq = readInt(input);
 		    int depth = readInt(input);
 		    bytesLeft -= identifierSize + 8;
-			fprintf(stderr, "found HPROF_GC_ROOT_JAVA_FRAME\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_JAVA_FRAME\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
 			addReference(VIRTUAL_ROOT_ID, id, 0);
@@ -781,7 +797,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    long int id = readIdentifier(input);
 		    int threadSeq = readInt(input);
 		    bytesLeft -= identifierSize + 4;
-			fprintf(stderr, "found HPROF_GC_ROOT_NATIVE_STACK\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_NATIVE_STACK\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
 			addReference(VIRTUAL_ROOT_ID, id, 0);
@@ -793,7 +809,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		case HPROF_GC_ROOT_STICKY_CLASS: {
 		    long int id = readIdentifier(input);
 		    bytesLeft -= identifierSize;
-			fprintf(stderr, "found HPROF_GC_ROOT_SICKY_CLASS\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_SICKY_CLASS\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
 			addReference(VIRTUAL_ROOT_ID, id, 0);
@@ -804,7 +820,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		    long int id = readIdentifier(input);
 		    int threadSeq = readInt(input);
 		    bytesLeft -= identifierSize + 4;
-			fprintf(stderr, "found HPROF_GC_ROOT_THREAD_BLOCK\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_THREAD_BLOCK\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
 			addReference(VIRTUAL_ROOT_ID, id, 0);
@@ -817,7 +833,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 		case HPROF_GC_ROOT_MONITOR_USED: {
 		    long int id = readIdentifier(input);
 		    bytesLeft -= identifierSize;
-			fprintf(stderr, "found HPROF_GC_ROOT_MONITOR_USED\n");
+			//fprintf(stderr, "found HPROF_GC_ROOT_MONITOR_USED\n");
 			rootsFound++;
 			//we model gc roots as a reference to the root object from null
 			addReference(VIRTUAL_ROOT_ID, id, 0);
@@ -867,34 +883,34 @@ int main(int argc, char **argv) {
 		input = fopen(argv[1], "r");
 	}
 	if(strcmp(argv[2], "-") == 0) {
-		classesFile = stdout;
+		//classesFile = stdout;
 	}
 	else {
-		classesFile = fopen(argv[2], "w");
+		//classesFile = fopen(argv[2], "w");
 	}
 	if(strcmp(argv[3], "-") == 0) {
-		instancesFile = stdout;
+		//instancesFile = stdout;
 	}
 	else {
-		instancesFile = fopen(argv[3], "w");
+		//instancesFile = fopen(argv[3], "w");
 		char fileNameBinary[1024];
 		sprintf(fileNameBinary, "%s.binary", argv[3]);
 		instancesFileBinary = fopen(fileNameBinary, "w");
 	}
 	if(strcmp(argv[4], "-") == 0) {
-		referencesFile = stdout;
+		//referencesFile = stdout;
 	}
 	else {
-		referencesFile = fopen(argv[4], "w");
+		//referencesFile = fopen(argv[4], "w");
 		char refFileNameBinary[1024];
 		sprintf(refFileNameBinary, "%s.binary", argv[4]);
 		referencesFileBinary = fopen(refFileNameBinary, "w");
 	}
 	if(strcmp(argv[5], "-") == 0) {
-		namesFile = stdout;
+		//namesFile = stdout;
 	}
 	else {
-		namesFile = fopen(argv[5], "w");
+		//namesFile = fopen(argv[5], "w");
 	}
 
 
@@ -915,7 +931,7 @@ int main(int argc, char **argv) {
 	char *creationTimeString = ctime((const time_t *)&creationTimestamp);
 	creationTimeString[strlen(creationTimeString)-1]=0;
 
-	fprintf(stderr, "identifiers are %lu bytes\n", identifierSize);
+	//fprintf(stderr, "identifiers are %lu bytes\n", identifierSize);
 	fprintf(stderr, "created on %s (%lld)\n", creationTimeString, creationTimestamp);
 
 	size_t recordBufferSize = 1024;
@@ -968,7 +984,7 @@ int main(int argc, char **argv) {
 
 			assert(recordBufferSize > 0);
 			if(recordBufferSize < recordLength+1) {
-				fprintf(stderr, "record buffer not big enough (%lu), growing\n", recordBufferSize);
+				//fprintf(stderr, "record buffer not big enough (%lu), growing\n", recordBufferSize);
 				recordBufferSize = std::max(recordBufferSize*2, recordLength+1);
 				record = (char *)realloc(record, recordBufferSize);
 			}
@@ -990,7 +1006,7 @@ int main(int argc, char **argv) {
 					record[recordLength]=0;
 					name = std::string(record+identifierSize);
 					nameFromId[id] = name;
-					fprintf(namesFile, "NA\t%lu\t%s\n", id, escapeString(name));
+					addName(id, name.c_str());
 					break;
 				case HPROF_LOAD_CLASS :
 					assert(recordLength == sizeof(int)*2 + identifierSize*2);
@@ -1035,16 +1051,26 @@ int main(int argc, char **argv) {
 	fprintf(stderr, "%llu unknown records\n", unknownRecords);
 	fprintf(stderr, "%llu roots\n", rootsFound);
 
-	fclose(classesFile);
-	fclose(instancesFile);
+	if(classesFile) {
+		fclose(classesFile);
+	}
+	if(instancesFile) {
+		fclose(instancesFile);
+	}
 	if(instancesFileBinary) {
 		fclose(instancesFileBinary);
 	}
-	fclose(referencesFile);
+	if(referencesFile) {
+		fclose(referencesFile);
+	}
 	if(referencesFileBinary) {
 		fclose(referencesFileBinary);
 	}
-	fclose(namesFile);
+	if(namesFile) {
+		fclose(namesFile);
+	}
+
+	return 0;
 }
 
 

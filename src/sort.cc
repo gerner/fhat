@@ -178,7 +178,7 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 			runs.push(s);
 			tempItemsRead++;
 		} else {
-			fprintf(stderr, "finished a run\n");
+			//fprintf(stderr, "finished a run\n");
 			delete s;
 		}
 	}

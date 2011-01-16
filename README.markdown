@@ -140,7 +140,7 @@ Where 1234 appears high up in the list of object types above.
 ## Domination!
 
 parse the dump
-	~/workspace/fhat/src/fhat heap.dump classes instances references names
+	~/workspace/fhat/src/parse heap.dump classes instances references names
 
 sort the instances
 	~/workspace/fhat/src/sort instances.binary instances.sorted id

@@ -9,7 +9,7 @@
 #include <queue>
 #include <unistd.h>
 
-#define SORT_BUFFER_SIZE 1024*1024*100
+#define SORT_BUFFER_SIZE 1024*1024*500
 
 struct Link {
 	unsigned long long src;
@@ -28,6 +28,11 @@ bool operator<(const Link &lhs, const Link &rhs) {
 template <class T>
 int readRecord(T *buf, FILE *in) {
 	return fread(buf, sizeof(T), 1, in);
+}
+
+template <class T>
+void copyRecord(T *dst, T *src) {
+	memcpy(dst, src, sizeof(T));
 }
 
 template <class T>
@@ -166,9 +171,9 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 			itemsWritten++;
 			if(unique) {
 				if(NULL == last) {
-					last = (T *)malloc(sizeof(T));
+					last = new T;
 				} else {
-					memcpy(last, s->next, sizeof(T));
+					copyRecord(last, s->next);
 				}
 			}
 		}
@@ -188,7 +193,7 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 	}
 	assert(itemsWrittenToRuns == tempItemsRead);
 	assert(itemsWrittenToRuns == itemsWrittenWithDups);
-	free(last);
+	delete last;
 
 	fprintf(stderr, "%llu records read, %llu records merged, %llu records written\n", itemsRead, tempItemsRead, itemsWritten);
 

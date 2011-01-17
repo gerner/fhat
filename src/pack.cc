@@ -30,7 +30,7 @@ bool operator<(const Link &lhs, const Link &rhs) {
 int main(int argc, char **argv) {
 	if(argc < 2) {
 		fprintf(stderr, "pack nodesfile input output");
-		return 0;
+		return -1;
 	}
 	assert(argc > 1);
 	int nodesFd = open(argv[1], O_RDONLY);

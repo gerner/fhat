@@ -872,7 +872,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 int main(int argc, char **argv) {
 	if(argc != 6) {
 		printf("usage: parse dumpfile classes instances references names\n");
-		return 0;
+		return -1;
 	}
 	assert(argc > 5);
 	FILE *input;

@@ -9,26 +9,9 @@
 #include <queue>
 #include <unistd.h>
 
+#include "util.h"
+
 #define SORT_BUFFER_SIZE 1024*1024*500
-
-struct Link {
-	unsigned long long src;
-	unsigned long long tgt;
-};
-
-bool operator<(const Link &lhs, const Link &rhs) {
-	if (lhs.src < rhs.src) {
-		return true;
-	} else if (lhs.src == rhs.src) {
-		return lhs.tgt < rhs.tgt;
-	}
-	return false;
-}
-
-template <class T>
-int readRecord(T *buf, FILE *in) {
-	return fread(buf, sizeof(T), 1, in);
-}
 
 template <class T>
 void copyRecord(T *dst, T *src) {
@@ -227,8 +210,8 @@ int main(int argc, char **argv)
 
 	if(0 == strcmp(type, "link")) {
 		sortFile<Link>(input, output, true);
-	} else if(0 == strcmp(type, "id")) {
-		sortFile<unsigned long long>(input, output, true);
+	} else if(0 == strcmp(type, "u64")) {
+		sortFile<u64>(input, output, true);
 	} else {
 		abort();
 	}

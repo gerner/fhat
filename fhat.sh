@@ -10,7 +10,9 @@ echo "parsing dump..."
 $catprog $heapdump | ~/workspace/fhat/src/parse - classes instances references names
 
 echo;echo "sorting instances..."
-~/workspace/fhat/src/sort instances.binary instances.sorted id
+~/workspace/fhat/src/sort instances.binary instances.sorted u64
+~/workspace/fhat/src/sortcolumns u64 instances.binary u64 instances.class.binary instances.sorted instances.class.sorted
+~/workspace/fhat/src/sortcolumns u64 instances.binary u64 instances.size.binary instances.sorted instances.size.sorted
 
 echo;echo "sorting references..."
 ~/workspace/fhat/src/sort references.binary references.sorted link

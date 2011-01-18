@@ -13,23 +13,7 @@
 #include <fcntl.h>
 #include <algorithm>
 
-struct Link {
-	unsigned long long src;
-	unsigned long long dst;
-	Link(unsigned long long src, unsigned long long dst) {
-		this->src = src;
-		this->dst = dst;
-	}
-};
-
-bool operator<(const Link &lhs, const Link &rhs) {
-	if (lhs.src < rhs.src) {
-		return true;
-	} else if (lhs.src == rhs.src) {
-		return lhs.dst < rhs.dst;
-	}
-	return false;
-}
+#include "util.h"
 
 FILE *pred;
 unsigned long long *semi;
@@ -86,18 +70,6 @@ unsigned long long dfs(unsigned long long v, unsigned long long depth) {
 		ptr++;
 	}
 	return descendants;
-}
-
-int openAndInitializeFile(const char *name, size_t size) {
-	int fd = open(name, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
-	assert(fd);
-	int retval = lseek(fd, size-1, SEEK_SET);
-	assert(size == (size_t)(retval+1));
-	retval = write(fd, "", 1);
-	assert(1 == retval);
-	retval = lseek(fd, 0, SEEK_SET);
-	assert(0 == retval);
-	return fd;
 }
 
 int main(int argc, char **argv) {

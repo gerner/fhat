@@ -420,12 +420,19 @@ FILE *instancesFileBinary = NULL;
 FILE *instancesSizeFileBinary = NULL;
 FILE *instancesClassFileBinary = NULL;
 FILE *classesFile = NULL;
+FILE *classesFileBinary = NULL;
+FILE *classesNameFileBinary = NULL;
 FILE *referencesFileBinary = NULL;
 FILE *referencesFile = NULL;
 FILE *namesFile = NULL;
+FILE *namesFileBinary = NULL;
+FILE *namesNameFileBinary = NULL;
+FILE *namesOffsetFileBinary = NULL;
+u64 namePos=0;
 
 std::map<long int, std::string> nameFromId;
 std::map<long int, std::string> classNameFromObjectId;
+std::map<long int, long int> classNameIdFromObjectId;
 std::map<long int, StackFrame> stackFrameFromId;
 std::map<long int, long int> superIdFromClassId;
 std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassId;
@@ -460,11 +467,24 @@ void addClass(unsigned long long id, unsigned long long superId, unsigned long l
 	if(classesFile) {
 		fprintf(classesFile, "CL\t%llu\t%llu\t%s\t%lu\n", id, superId, classNameFromObjectId[id].c_str(), size);
 	}
+	if(classesFileBinary) {
+		assert(classesNameFileBinary);
+		fwrite(&id, sizeof(u64), 1, classesFileBinary);
+		fwrite(&nameId, sizeof(u64), 1, classesNameFileBinary);
+	}
 }
 
 void addName(unsigned long long id, const char *name) {
 	if(namesFile) {
 		fprintf(namesFile, "NA\t%llu\t%s\n", id, escapeString(name));
+	}
+	if(namesFileBinary) {
+		assert(namesOffsetFileBinary);
+		assert(namesNameFileBinary);
+		fwrite(&id, sizeof(u64), 1, namesFileBinary);
+		fwrite(&namePos, sizeof(u64), 1, namesOffsetFileBinary);
+		fwrite(name, strlen(name)+1, 1, namesNameFileBinary);
+		namePos += strlen(name)+1;
 	}
 }
 
@@ -624,7 +644,7 @@ int readClass(FILE *input) {
 	}
 	
 	//output the class definition
-	addClass(id, superId, 0, bytesRead);
+	addClass(id, superId, classNameIdFromObjectId[id], bytesRead);
 	//also output an instance definition so that all the sizes match up
 	addInstance(id, id, "CL", bytesRead);
 	for(size_t i=0; i<staticReferences.size();i++) {
@@ -882,6 +902,11 @@ int main(int argc, char **argv) {
 	}
 	else {
 		//classesFile = fopen(argv[2], "w");
+		char fileNameBinary[1024];
+		sprintf(fileNameBinary, "%s.binary", argv[2]);
+		classesFileBinary = fopen(fileNameBinary, "w");
+		sprintf(fileNameBinary, "%s.name.binary", argv[2]);
+		classesNameFileBinary = fopen(fileNameBinary, "w");
 	}
 	if(strcmp(argv[3], "-") == 0) {
 		//instancesFile = stdout;
@@ -910,6 +935,13 @@ int main(int argc, char **argv) {
 	}
 	else {
 		//namesFile = fopen(argv[5], "w");
+		char fileNameBinary[1024];
+		sprintf(fileNameBinary, "%s.binary", argv[5]);
+		namesFileBinary = fopen(fileNameBinary, "w");
+		sprintf(fileNameBinary, "%s.name.binary", argv[5]);
+		namesNameFileBinary = fopen(fileNameBinary, "w");
+		sprintf(fileNameBinary, "%s.offset.binary", argv[5]);
+		namesOffsetFileBinary = fopen(fileNameBinary, "w");
 	}
 
 
@@ -1015,6 +1047,7 @@ int main(int argc, char **argv) {
 					classNameId = readIdentifier(record+sizeof(int)*2+identifierSize);
 					assert(nameFromId.find(classNameId) != nameFromId.end());
 					classNameFromObjectId[classId] = nameFromId[classNameId];
+					classNameIdFromObjectId[classId] = classNameId;
 					break;
 				case HPROF_FRAME :
 					assert(recordLength == identifierSize * 4 + sizeof(int)*2);

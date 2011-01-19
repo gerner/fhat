@@ -6,8 +6,25 @@ if type -P pv &> /dev/null; then catprog=pv; fi
 
 heapdump=$1
 
+if [ ! -e $heapdump ]
+then
+	echo "can't open $heapdump" 1>&2
+	exit 0
+fi
+
 echo "parsing dump..."
 $catprog $heapdump | ~/workspace/fhat/src/parse - classes instances references names
+
+echo;echo "sorting names..."
+~/workspace/fhat/src/sort names.binary names.sorted u64
+~/workspace/fhat/src/sortcolumns u64 names.binary u64 names.offset.binary names.sorted names.offset.sorted
+
+echo;echo "sorting classes..."
+~/workspace/fhat/src/sort classes.binary classes.sorted u64
+~/workspace/fhat/src/sortcolumns u64 classes.binary u64 classes.name.binary classes.sorted classes.name.sorted
+
+echo;echo "translating class names..."
+$catprog classes.name.sorted | ~/workspace/fhat/src/translate names.sorted - - 1 > classes.name.packed
 
 echo;echo "sorting instances..."
 ~/workspace/fhat/src/sort instances.binary instances.sorted u64

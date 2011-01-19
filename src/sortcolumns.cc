@@ -14,6 +14,9 @@ u64 sortColumn(T *sortedKey, V *sortedValue, size_t numRecords, FILE *unsortedKe
 
 	u64 recordsSorted = 0;
 	while(1 == readRecord(k, unsortedKey)) {
+		if(recordsSorted % (numRecords/80) == 0) {
+			fprintf(stderr, ".");
+		}
 		int retval = readRecord(v, unsortedValue);
 		assert(1 == retval);
 		T *ptr = std::lower_bound(sortedKey, sortedKey+numRecords, *k);
@@ -23,6 +26,7 @@ u64 sortColumn(T *sortedKey, V *sortedValue, size_t numRecords, FILE *unsortedKe
 		sortedValue[ptr - sortedKey] = *v;
 		recordsSorted++;
 	}
+	fprintf(stderr, "\n");
 
 	free(k);
 	free(v);
@@ -67,7 +71,7 @@ u64 prepareAndSortColumn(int keyFd, int valueFd, FILE *unsortedKey, FILE *unsort
 int main(int argc, char **argv) {
 	if(argc < 7) {
 		fprintf(stderr, "sortcolumns key_type unsorted_key col_type unsorted_col sorted_key sorted_col\n");
-		return 0;
+		return -1;
 	}
 	//input:
 	//	unsorted key column

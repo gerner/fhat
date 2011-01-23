@@ -85,7 +85,7 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 			T *ptr = buffer;
 			while(ptr < bufPtr) {
 				if(!unique || ptr == buffer || *(ptr-1) < *ptr) {
-					int retval = fwrite(ptr, sizeof(T), 1, out);
+					int retval = writeRecord(ptr, out);
 					assert(1 == retval);
 					itemsWritten++;
 				}
@@ -105,7 +105,7 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 		T *ptr = buffer;
 		while (ptr < bufPtr) {
 			if(ptr == buffer || !unique || (ptr > buffer && *(ptr-1) < *ptr)) {
-				int retval = fwrite(ptr, sizeof(T), 1, tempStream);
+				int retval = writeRecord(ptr, tempStream);
 				assert(1 == retval);
 				itemsWritten++;
 			}
@@ -150,7 +150,7 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 		assert(NULL == last || !(*(s->next) < *last));
 
 		if(!unique || NULL == last || *last < *(s->next)) {
-			fwrite(s->next, sizeof(T), 1, out);
+			writeRecord(s->next, out);
 			itemsWritten++;
 			if(unique) {
 				if(NULL == last) {

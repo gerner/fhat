@@ -50,4 +50,9 @@ int readRecord(T *buf, FILE *in) {
 	return fread(buf, sizeof(T), 1, in);
 }
 
+template <class T>
+int writeRecord(T *buf, FILE *out) {
+	return fwrite(buf, sizeof(T), 1, out);
+}
+
 #endif

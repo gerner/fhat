@@ -18,16 +18,50 @@ struct Link {
 		this->src = src;
 		this->dst = dst;
 	}
+	bool operator<(const Link &rhs) const {
+		if (this->src < rhs.src) {
+			return true;
+		} else if (this->src == rhs.src) {
+			return this->dst < rhs.dst;
+		}
+		return false;
+	}
+	bool operator>(const Link &rhs) const {
+		if (this->src > rhs.src) {
+			return true;
+		} else if (this->src == rhs.src) {
+			return this->dst > rhs.dst;
+		}
+		return false;
+	}
 };
 
-bool operator<(const Link &lhs, const Link &rhs) {
-	if (lhs.src < rhs.src) {
-		return true;
-	} else if (lhs.src == rhs.src) {
-		return lhs.dst < rhs.dst;
+template <int N>
+struct U64_N {
+	u64 v[N];
+
+	bool operator<(const U64_N<N> &rhs) const {
+		for(size_t i=0; i<N; i++) {
+			if(this->v[i] < rhs.v[i]) {
+				return true;
+			} else if(this->v[i] != rhs.v[i]) {
+				return false;
+			}
+		}
+		return false;
 	}
-	return false;
-}
+	
+	bool operator>(const U64_N<N> &rhs) const {
+		for(size_t i=0; i<N; i++) {
+			if(this->v[i] > rhs.v[i]) {
+				return true;
+			} else if(this->v[i] != rhs.v[i]) {
+				return false;
+			}
+		}
+		return false;
+	}
+};
 
 int initializeFile(int fd, size_t size) {
 	assert(fd);

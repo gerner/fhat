@@ -39,16 +39,20 @@ struct SortedFile
 	}
 };
 
-template <class T>
+template <class T, class Compare>
 struct CompareSortedFiles {
+	Compare cmp;
+	CompareSortedFiles(Compare cmp = Compare()) {
+		this->cmp = cmp;
+	}
 	bool operator()(const SortedFile<T> *lhs, const SortedFile<T> *rhs) const {
 		//we want to use this with a priority queue, so we swap the relationship so that the smallest item appears the biggest
-		return *(rhs->next) < *(lhs->next);
+		return cmp(*(rhs->next), *(lhs->next));
 	}
 };
 
-template <class T>
-int sortFile(FILE *in, FILE *out, bool unique) {
+template <class T, class Compare>
+int sortFile(FILE *in, FILE *out, bool unique, Compare cmp = Compare()) {
 	assert(in);
 	assert(out);
 	std::vector<std::string> tempFiles;
@@ -77,18 +81,19 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 		}
 
 		//sort it in memory
-		std::sort(buffer, bufPtr);
+		std::sort(buffer, bufPtr, cmp);
 
 		//short circuit if the whole thing fit in memory
 		if(foundEOF && tempFiles.size() == 0) {
 			fprintf(stderr, "input fit in memory, short circuit\n");
 			T *ptr = buffer;
 			while(ptr < bufPtr) {
-				if(!unique || ptr == buffer || *(ptr-1) < *ptr) {
+				if(!unique || ptr == buffer || cmp(*(ptr-1), *ptr)) {
 					int retval = writeRecord(ptr, out);
 					assert(1 == retval);
 					itemsWritten++;
 				}
+				assert(ptr == buffer || !(cmp(*(ptr), *(ptr-1))));
 				ptr++;
 				itemsWrittenWithDups++;
 			}
@@ -104,12 +109,12 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 		FILE *tempStream = fdopen(mkstemp(tempFileName), "w");
 		T *ptr = buffer;
 		while (ptr < bufPtr) {
-			if(ptr == buffer || !unique || (ptr > buffer && *(ptr-1) < *ptr)) {
+			if(ptr == buffer || !unique || (ptr > buffer && cmp(*(ptr-1), *ptr))) {
 				int retval = writeRecord(ptr, tempStream);
 				assert(1 == retval);
 				itemsWritten++;
 			}
-			assert(ptr == buffer || !(*(ptr) < *(ptr-1)));
+			assert(ptr == buffer || !(cmp(*(ptr), *(ptr-1))));
 			ptr++;
 			itemsWrittenWithDups++;
 		}
@@ -127,7 +132,7 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 	//merge sorted runs:
 	fprintf(stderr, "merging %lu sorted runs of (%llu records total)\n", tempFiles.size(), itemsWrittenToRuns);
 	//open all temp files and populate SortedFile instances for each
-	std::priority_queue<SortedFile<T> *, std::vector<SortedFile<T> *>, CompareSortedFiles<T> > runs;
+	std::priority_queue<SortedFile<T> *, std::vector<SortedFile<T> *>, CompareSortedFiles<T, Compare> > runs;
 	for(unsigned int i=0; i<tempFiles.size(); i++) {
 		SortedFile<T> *s = new SortedFile<T>(tempFiles[i].c_str());
 		//read next from each and place into a pq (if next)
@@ -147,17 +152,16 @@ int sortFile(FILE *in, FILE *out, bool unique) {
 		assert(s->next);
 		runs.pop();
 		//	write to output
-		assert(NULL == last || !(*(s->next) < *last));
+		assert(NULL == last || !(cmp(*(s->next), *last)));
 
-		if(!unique || NULL == last || *last < *(s->next)) {
+		if(!unique || NULL == last || cmp(*last, *(s->next))) {
 			writeRecord(s->next, out);
 			itemsWritten++;
 			if(unique) {
 				if(NULL == last) {
 					last = new T;
-				} else {
-					copyRecord(last, s->next);
 				}
+				copyRecord(last, s->next);
 			}
 		}
 		itemsWrittenWithDups++;
@@ -209,9 +213,15 @@ int main(int argc, char **argv)
 	}
 
 	if(0 == strcmp(type, "link")) {
-		sortFile<Link>(input, output, true);
+		sortFile<Link, std::less<Link> >(input, output, true);
 	} else if(0 == strcmp(type, "u64")) {
-		sortFile<u64>(input, output, true);
+		sortFile<u64, std::less<u64> >(input, output, true);
+	} else if(0 == strcmp(type, "u64_3")) {
+		sortFile<U64_N<3>, std::less<U64_N<3> > >(input, output, true);
+	} else if(0 == strcmp(type, "ru64_4")) {
+		sortFile<U64_N<4>, std::greater<U64_N<4> > >(input, output, true);
+	} else if(0 == strcmp(type, "ru64_5")) {
+		sortFile<U64_N<5>, std::greater<U64_N<5> > >(input, output, true);
 	} else {
 		abort();
 	}

@@ -419,6 +419,7 @@ FILE *instancesFile = NULL;
 FILE *instancesFileBinary = NULL;
 FILE *instancesSizeFileBinary = NULL;
 FILE *instancesClassFileBinary = NULL;
+FILE *instancesOffsetFileBinary = NULL;
 FILE *classesFile = NULL;
 FILE *classesFileBinary = NULL;
 FILE *classesNameFileBinary = NULL;
@@ -440,7 +441,7 @@ std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassId;
 std::map<long int, std::vector<FieldInfo> > fieldInfoFromClassIdToRoot;
 unsigned long long rootsFound = 0;
 
-void addInstance(unsigned long long id, unsigned long long classId, const char * typeCode, unsigned long long size) {
+void addInstance(unsigned long long id, unsigned long long classId, const char * typeCode, unsigned long long size, u64 position) {
 	if(instancesFile) {
 		fprintf (instancesFile, "%s\t%llu\t%llu\t%llu\n", typeCode, id, classId, size);
 	}
@@ -450,6 +451,8 @@ void addInstance(unsigned long long id, unsigned long long classId, const char *
 		fwrite(&size, sizeof(u64), 1, instancesSizeFileBinary);
 		assert(instancesClassFileBinary);
 		fwrite(&classId, sizeof(u64), 1, instancesClassFileBinary);
+		assert(instancesOffsetFileBinary);
+		fwrite(&position, sizeof(u64), 1, instancesOffsetFileBinary);
 	}
 }
 
@@ -486,6 +489,12 @@ void addName(unsigned long long id, const char *name) {
 		fwrite(name, strlen(name)+1, 1, namesNameFileBinary);
 		namePos += strlen(name)+1;
 	}
+}
+
+void addSyntheticName(u64 id, const char *name) {
+	classNameFromObjectId[id] = std::string(name);
+	addName(id, name);
+	addClass(id, 0, id, 0);
 }
 
 size_t readValueForType(char type, FILE *input) {
@@ -551,11 +560,11 @@ int readPrimitiveArray(FILE *input) {
 		}
 	}
 	
+	unsigned long long classId = typeCode;
+	addInstance(id, classId, "AP", elSize*num, positionInFile);
 	skipBytes(input, elSize*num);
 	bytesRead += elSize*num;
 	//TODO: there's actually a class loaded for this array
-	unsigned long long classId = typeCode;
-	addInstance(id, classId, "AP", elSize*num);
 
 	return bytesRead;
 }
@@ -569,7 +578,7 @@ int readObjectArray(FILE *input) {
 	int bytesRead = identifierSize*2 + 8;
 
 	//TODO: there's actually a class loaded for this array
-	addInstance(id, elementClassID, "AO", identifierSize*num);
+	addInstance(id, elementClassID, "AO", identifierSize*num, positionInFile);
 	for (int i = 0; i < num; i++) {
 		long int idElement = readIdentifier(input);
 		addReference(id, idElement, 0);
@@ -593,6 +602,8 @@ int readClass(FILE *input) {
 	long int reserved2 = readIdentifier(input);
 	int instanceSize = readInt(input);
 	int bytesRead = 7 * identifierSize + 8;
+
+	u64 position = positionInFile;
 
 	//const pool entries
 	int numConstPoolEntries = readUnsignedShort(input);
@@ -646,7 +657,7 @@ int readClass(FILE *input) {
 	//output the class definition
 	addClass(id, superId, classNameIdFromObjectId[id], bytesRead);
 	//also output an instance definition so that all the sizes match up
-	addInstance(id, id, "CL", bytesRead);
+	addInstance(id, id, "CL", bytesRead, position);
 	for(size_t i=0; i<staticReferences.size();i++) {
 		addReference(id, staticReferences[i], staticNameIds[i]);
 		addReference(VIRTUAL_ROOT_ID, staticReferences[i], staticNameIds[i]);
@@ -679,6 +690,7 @@ std::vector<FieldInfo> resolveClassToRoot(long int classId) {
 }
 
 size_t readInstance(FILE *input) {
+	u64 position = positionInFile;
 	long int id = readIdentifier(input);
 	int stackTraceId = readInt(input);
 	long int classId = readIdentifier(input);
@@ -697,7 +709,7 @@ size_t readInstance(FILE *input) {
 	size_t bytesFollowing = (b1 << 24) | (b2 << 16) | (b3 << 8) | (b4 << 0);
 	//the following assert is very expensive just to make sure we've ready the class def
 	//assert(classNameFromObjectId.find(classId) != classNameFromObjectId.end());
-	addInstance(id, classId, "IN", bytesFollowing+size);
+	addInstance(id, classId, "IN", bytesFollowing+size, positionInFile);
 	size_t bytesRead = 0;
 
 	//go up the class hierarchy (super class relationships
@@ -729,7 +741,7 @@ int readHeapDump(FILE *input, size_t dumpSize) {
 	fprintf(stderr, "heap dump of size %lu bytes\n", dumpSize);
 
 	//write out virtual root as an instance
-	addInstance(0, 0, "VR", 0);
+	addInstance(0, 0, "VR", 0, positionInFile);
 	
 	size_t dumpStartPosition = positionInFile;
 	size_t bytesLeft = dumpSize;
@@ -920,6 +932,8 @@ int main(int argc, char **argv) {
 		instancesSizeFileBinary = fopen(fileNameBinary, "w");
 		sprintf(fileNameBinary, "%s.class.binary", argv[3]);
 		instancesClassFileBinary = fopen(fileNameBinary, "w");
+		sprintf(fileNameBinary, "%s.offset.binary", argv[3]);
+		instancesOffsetFileBinary = fopen(fileNameBinary, "w");
 	}
 	if(strcmp(argv[4], "-") == 0) {
 		//referencesFile = stdout;
@@ -945,6 +959,14 @@ int main(int argc, char **argv) {
 	}
 
 
+	addSyntheticName(T_BOOLEAN, "boolean");
+	addSyntheticName(T_CHAR, "char");
+	addSyntheticName(T_FLOAT, "float");
+	addSyntheticName(T_DOUBLE, "double");
+	addSyntheticName(T_BYTE, "byte");
+	addSyntheticName(T_SHORT, "short");
+	addSyntheticName(T_INT, "int");
+	addSyntheticName(T_LONG, "long");
 
 	int ret;
 
@@ -958,7 +980,7 @@ int main(int argc, char **argv) {
 	positionInFile += vbs;
 
 	identifierSize = readInt(input);
-	creationTimestamp = readLongLongInt(input);
+	creationTimestamp = readLongLongInt(input)/1000;
 	char *creationTimeString = ctime((const time_t *)&creationTimestamp);
 	creationTimeString[strlen(creationTimeString)-1]=0;
 

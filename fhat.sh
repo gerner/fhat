@@ -31,6 +31,7 @@ echo;echo "sorting instances..."
 echo;echo "sorting instance columns..."
 ~/workspace/fhat/src/sortcolumns u64 instances.binary u64 instances.class.binary instances.sorted instances.class.sorted
 ~/workspace/fhat/src/sortcolumns u64 instances.binary u64 instances.size.binary instances.sorted instances.size.sorted
+~/workspace/fhat/src/sortcolumns u64 instances.binary u64 instances.offset.binary instances.sorted instances.offset.sorted
 
 echo;echo "sorting references..."
 ~/workspace/fhat/src/sort references.binary references.sorted link
@@ -51,7 +52,25 @@ echo;echo "sorting pred..."
 echo;echo "compute dominator tree..."
 ~/workspace/fhat/src/dominate pred.sorted semi vertex parent dominator
 
+echo;echo "translating dominators..."
+$catprog dominator | ~/workspace/fhat/src/unpack instances.sorted - - > dominator.translated 
+
 echo;echo "compute retained memory for each node..."
-~/workspace/fhat/src/retain vertex dominator instances.size.sorted instances.retained.sorted
+~/workspace/fhat/src/retain vertex dominator instances.size.sorted instances.retained.sorted instances.retaincount.sorted
+
+#echo;echo "sort by retained size..."
+#~/workspace/fhat/src/zipfiles zip instances.retained.sorted instances.size.sorted instances.sorted instances.class.sorted | pv | ~/workspace/fhat/src/sort - - ru64_4 | ~/workspace/fhat/src/zipfiles unzip i.r i.s i i.c
+
+#for sqlite: (id, retained, retCount, size, dominator, class)
+echo;echo "preparing for sqlite..."
+
+#this gets the class name for each instance
+$catprog instances.class.sorted | ~/workspace/fhat/src/translate classes.sorted - - 1 | ~/workspace/fhat/src/unpack classes.name.sorted - - | ~/workspace/fhat/src/translate names.sorted - - 0 | ~/workspace/fhat/src/unpack names.offset.sorted - - | ~/workspace/fhat/src/unpack names.name.binary - - string | tr '\0' '\n' > instances.data.names
+
+#this pastes the class names to the right of all the other instance columns made readable
+~/workspace/fhat/src/zipfiles zip instances.sorted instances.retained.sorted instances.retaincount.sorted instances.size.sorted dominator.translated instances.offset.sorted | pv - | od -t d8 -w$((6*8)) -An -v | sed 's/[ ][ ]*/\t/g' | sed 's/^\t//' | paste - instances.data.names > instances.data.full
+
+echo;echo "getting top 1000 instances by retained size..." 
+sort -k2 -r -n instances.data.full | head -n 1000 > instances.top1k
 
 echo;echo "done."

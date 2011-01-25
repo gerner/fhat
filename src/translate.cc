@@ -39,12 +39,14 @@ int main(int argc, char **argv) {
 		}
 	}
 	assert(input);
+
 	FILE *output = stdout;
 	if(argc > 3) {
-		if(0 != strcmp(argv[2], "-")) {
-			output = fopen(argv[3], "r");
+		if(0 != strcmp(argv[3], "-")) {
+			output = fopen(argv[3], "w");
 		}
 	}
+	assert(output);
 	
 	FILE *orphansFile = NULL;
 	if(argc > 4 &&  0 == strcmp(argv[4], "1")) {

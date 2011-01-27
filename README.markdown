@@ -38,6 +38,14 @@ the output of fhat is meant to be analyzed by other simple tools such as:
 * uniq
 * sqlite
 
+### Quick Report
+
+The script fhat.sh will (after building and with some small tweaks to binary paths) quickly (at roughly 4MB/sec) generate a usable report in instances.data.full.  
+
+Specifically there are rows of data sorted by retained heap size.  The columns are id, retained heap, retained count, object size, dominator, class id, class name.
+
+This will quickly identify the objects which are retaining large amounts of memory.  That is, these are the objects who, if garbage collected, would make a very large amount of memory in the heap collectable.  
+
 ### Getting Data into Sqlite
 
 First, I highly recommend you run sqlite in nosync mode.  This will improve the time it import data and do any inserts you might do (see transitive closure below).

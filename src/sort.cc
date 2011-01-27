@@ -222,6 +222,10 @@ int main(int argc, char **argv)
 		sortFile<U64_N<4>, std::greater<U64_N<4> > >(input, output, true);
 	} else if(0 == strcmp(type, "ru64_5")) {
 		sortFile<U64_N<5>, std::greater<U64_N<5> > >(input, output, true);
+	} else if(0 == strcmp(type, "ru64_6")) {
+		sortFile<U64_N<6>, std::greater<U64_N<6> > >(input, output, true);
+	} else if(0 == strcmp(type, "ru64_7"))  {
+		sortFile<U64_N<7>, std::greater<U64_N<7> > >(input, output, true);
 	} else {
 		abort();
 	}

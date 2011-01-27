@@ -23,6 +23,7 @@ fhat takes a dump file in the HPROF binary format and produces several text file
 	fhat dumpfile instances_file classes_file references_file names_file
 
 where 
+
 * dumpfile is the HPROF binary dump
 * instances_file is the output file for information about instances
 * classes_file is the output file for information about classes
@@ -32,6 +33,7 @@ where
 ## Analyzing
 
 the output of fhat is meant to be analyzed by other simple tools such as:
+
 * grep
 * awk
 * sort
